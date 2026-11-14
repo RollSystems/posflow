@@ -1627,6 +1627,7 @@ function renderDatos(){
   if(Cloud.estado==='vacia') h+='<button class="btn-big" style="margin:12px 0 0;" onclick="subirANube()">☁️ Subir los datos de este dispositivo</button><div class="lr-sub">Hazlo desde el dispositivo que tiene tus datos reales.</div>';
   h+='<div class="lr-sub" style="margin-top:10px;">Por ahora usa la app en un solo dispositivo a la vez.</div>';
   if(Cloud.tipo==='supabase' && Cloud.db && Cloud.db.tieneSesion && Cloud.db.tieneSesion()) h+='<button class="btn-wide" style="margin-top:10px;" onclick="cerrarSesion()">Cerrar sesión</button>';
+  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 1.0 (13/11/2026)</div>';
   el.innerHTML=h;
 }
 async function respaldoDescargar(){
