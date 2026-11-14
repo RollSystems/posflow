@@ -929,11 +929,12 @@ function verBarcodeProducto(){ const p=DB.productos.find(x=>x.id===editProdId); 
 function verBarcodeCliente(){ const c=DB.clientes.find(x=>x.id===detCliId); if(c) mostrarBarcode(c.nombre,c.codigo); }
 
 // ---------- configuración y tickets ----------
-const CFG_DEF={nombre:'Mi Tienda',nit:'',direccion:'',tel:'',logo:'',papel:'80',pie:'¡Gracias por su compra!',auto:false,utilidad:30,redondeo:0};
+const CFG_DEF={nombre:'PosFlow',nit:'',direccion:'',tel:'',logo:'',papel:'80',pie:'¡Gracias por su compra!',auto:false,utilidad:30,redondeo:0};
 DB.config = Object.assign({}, CFG_DEF, DB.config||{});
+if(DB.config.nombre==='Mi Tienda') DB.config.nombre='PosFlow';
 let cfgTmp={}, ticketActual=null;
 function aplicarConfig(){
-  document.getElementById('hNegocio').textContent=DB.config.nombre||'Mi Tienda';
+  const nn=DB.config.nombre||''; const hn=document.getElementById('hNegocio'); hn.textContent=(nn==='PosFlow')?'':nn; hn.style.display=(nn&&nn!=='PosFlow')?'block':'none';
   document.title='PosFlow';
   document.getElementById('fechaHoy').textContent=hoyStr()+' · '+nombreBodega(DB.config.bodega);
   const w=DB.config.papel==='58'?58:80;
@@ -976,7 +977,7 @@ function cargarLogo(inp){
   rd.readAsDataURL(f); inp.value='';
 }
 function guardarCfg(){
-  cfgTmp.nombre=document.getElementById('cfNombre').value.trim()||'Mi Tienda';
+  cfgTmp.nombre=document.getElementById('cfNombre').value.trim()||'PosFlow';
   cfgTmp.nit=document.getElementById('cfNit').value.trim();
   cfgTmp.direccion=document.getElementById('cfDir').value.trim();
   cfgTmp.tel=document.getElementById('cfTel').value.trim();
@@ -1343,7 +1344,7 @@ function pdfRepInv(bod,filtro,val){
   const cut=(s,w)=>{ s=String(s); if(doc.getTextWidth(s)<=w-8) return s; while(s.length>1 && doc.getTextWidth(s+'...')>w-8) s=s.slice(0,-1); return s+'...'; };
   const celda=(txt,i,y,bold)=>{ doc.setFont('helvetica',bold?'bold':'normal'); const t=cut(txt,ws[i]); if(d.cols[i].r) doc.text(t,xs[i]+ws[i]-4,y,{align:'right'}); else doc.text(t,xs[i]+4,y); };
   let y=M;
-  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text(c.nombre||'Mi Tienda',M,y+10);
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text(c.nombre||'PosFlow',M,y+10);
   doc.setFont('helvetica','normal'); doc.setFontSize(9);
   if(c.nit){ y+=14; doc.text('NIT: '+c.nit,M,y+10); }
   doc.setFont('helvetica','bold'); doc.setFontSize(13); y+=24; doc.text('Reporte de inventario',M,y+10);
@@ -1461,6 +1462,7 @@ async function leerColeccion(db,nombre){
 function normalizarDB(){
   COLS.forEach(c=>{ if(!Array.isArray(DB[c])) DB[c]=[]; });
   DB.config=Object.assign({},CFG_DEF,DB.config||{});
+  if(DB.config.nombre==='Mi Tienda') DB.config.nombre='PosFlow';
   if(!DB.bodegas.length) DB.bodegas=[{id:'b1',nombre:'Bodega principal'}];
   if(!DB.bodegas.some(b=>b.id===DB.config.bodega)) DB.config.bodega=DB.bodegas[0].id;
   DB.productos.forEach(vincular);
