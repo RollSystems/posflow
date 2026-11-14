@@ -58,7 +58,7 @@ app.delete('/api/:col/:id', col, wrap(async (q, r) => {
 }));
 
 app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res, f) => { if (f.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); }
+  setHeaders: (res, f) => { if (f.endsWith('.html') || f.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache'); }
 }));
 app.use((e, q, r, n) => { console.error(e.message); r.status(e.status || 500).json({ error: e.message }); });
 

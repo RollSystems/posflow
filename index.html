@@ -1393,7 +1393,7 @@ const ID_OK=/^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 function nubeEstado(e,msg){
   Cloud.estado=e; Cloud.msg=msg||'';
   const b=document.getElementById('nubeBtn');
-  if(b) b.textContent=({local:'💾',cargando:'⏳',sync:'🔄',ok:'☁️',error:'⚠️',cuota:'⛔',vacia:'📤',login:'🔑'})[e]||'💾';
+  if(b) b.textContent=({local:'💾',cargando:'⏳',sync:'🔄',ok:'☁️',error:'⚠️',cuota:'⛔',vacia:'📤',login:'🔑',offline:'📴'})[e]||'💾';
   if(document.getElementById('ovDatos').classList.contains('open')) renderDatos();
 }
 function docsDeseados(){
@@ -1406,28 +1406,44 @@ function nubeProgramar(){
   if(typeof Cloud==='undefined' || !Cloud.listo) return;
   clearTimeout(Cloud.timer); Cloud.timer=setTimeout(nubeSync,700);
 }
+function hashStr(str){
+  let h1=0xdeadbeef,h2=0x41c6ce57;
+  for(let i=0;i<str.length;i++){ const c=str.charCodeAt(i); h1=Math.imul(h1^c,2654435761); h2=Math.imul(h2^c,1597334677); }
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);
+  h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+  return 4294967296*(2097151&h2)+(h1>>>0);
+}
+function persistirSnap(){ try{ localStorage.setItem('posflowSnap',JSON.stringify({tipo:Cloud.tipo,h:Cloud.snap})); }catch(e){} }
+function snapGuardado(){ try{ const j=JSON.parse(localStorage.getItem('posflowSnap')||'null'); return (j && j.tipo===Cloud.tipo && j.h) ? j.h : null; }catch(e){ return null; } }
+function recordarBackend(){ try{ if(Cloud.tipo==='pg'||Cloud.tipo==='supabase') localStorage.setItem('posflowBackend',Cloud.tipo); }catch(e){} }
+function programarReintento(){
+  clearTimeout(Cloud.retry); Cloud.backoff=Math.min((Cloud.backoff||0)*2||5000,60000);
+  Cloud.retry=setTimeout(reconectar,Cloud.backoff);
+}
+function reconectar(){ if(Cloud.listo && Cloud.db) nubeSync(); else if(!Cloud.cargando) iniciarNube(); }
 async function nubeSync(){
   if(!Cloud.listo || !Cloud.db) return;
   if(Cloud.corriendo){ Cloud.otra=true; return; }
   Cloud.corriendo=true; Cloud.otra=false;
+  let cambioSnap=false;
   try{
     const des=docsDeseados(), ops=[];
-    for(const k in des){ if(Cloud.malos.has(k)) continue; const t=JSON.stringify(des[k]); if(Cloud.snap[k]!==t) ops.push({k,t,tipo:'set'}); }
+    for(const k in des){ if(Cloud.malos.has(k)) continue; const t=JSON.stringify(des[k]), h=hashStr(t); if(Cloud.snap[k]!==h) ops.push({k,t,h,tipo:'set'}); }
     for(const k in Cloud.snap){ if(!(k in des)) ops.push({k,tipo:'del'}); }
-    if(!ops.length){ if(Cloud.estado!=='cuota' && Cloud.malos.size===0) nubeEstado('ok'); return; }
+    Cloud.pendientes=ops.length;
+    if(!ops.length){ if(Cloud.estado!=='cuota' && Cloud.malos.size===0){ Cloud.backoff=0; if(!Cloud.ultima) Cloud.ultima=new Date(); nubeEstado('ok'); } return; }
+    if(typeof navigator!=='undefined' && navigator.onLine===false){ nubeEstado('offline','Sin conexión: '+ops.length+' cambio(s) pendientes, se enviarán solos'); return; }
     nubeEstado('sync','Guardando '+ops.length+' cambio(s)...');
     let fallo=null, hechos=0, i=0;
+    const hecho=op=>{ if(op.tipo==='set') Cloud.snap[op.k]=op.h; else delete Cloud.snap[op.k]; cambioSnap=true; };
     const worker=async()=>{
       while(i<ops.length && !fallo){
         const op=ops[i++];
         try{
           const ref=Cloud.db.doc(op.k);
-          if(op.tipo==='set'){ await ref.set(JSON.parse(op.t)); Cloud.snap[op.k]=op.t; }
-          else { await ref.delete(); delete Cloud.snap[op.k]; }
-          hechos++; if(ops.length>20) nubeEstado('sync','Guardando '+hechos+' de '+ops.length+'...');
-        }catch(e){
-          if(e && e.code==='invalid_argument'){ Cloud.malos.add(op.k); } else fallo=e||{code:'unavailable'};
-        }
+          if(op.tipo==='set') await ref.set(JSON.parse(op.t)); else await ref.delete();
+          hecho(op); hechos++; if(ops.length>20) nubeEstado('sync','Guardando '+hechos+' de '+ops.length+'...');
+        }catch(e){ if(e && e.code==='invalid_argument'){ Cloud.malos.add(op.k); } else fallo=e||{code:'unavailable'}; }
       }
     };
     const porLotes=async()=>{
@@ -1435,18 +1451,17 @@ async function nubeSync(){
         const parte=ops.slice(k,k+100);
         try{
           await Cloud.db.lote(parte.map(o=>o.tipo==='set'?{tipo:'set',k:o.k,data:JSON.parse(o.t)}:{tipo:'del',k:o.k}));
-          parte.forEach(o=>{ if(o.tipo==='set') Cloud.snap[o.k]=o.t; else delete Cloud.snap[o.k]; });
-          hechos+=parte.length; if(ops.length>20) nubeEstado('sync','Guardando '+hechos+' de '+ops.length+'...');
+          parte.forEach(hecho); hechos+=parte.length; if(ops.length>20) nubeEstado('sync','Guardando '+hechos+' de '+ops.length+'...');
         }catch(e){ if(e && e.code==='invalid_argument') parte.forEach(o=>Cloud.malos.add(o.k)); else fallo=e||{code:'unavailable'}; }
       }
     };
     if(Cloud.db.lote) await porLotes(); else await Promise.all([worker(),worker(),worker(),worker()]);
     if(fallo && fallo.code==='quota_exceeded'){ nubeEstado('cuota','Se llenó el límite de la base de datos'); toast('Base de datos llena: descarga un respaldo'); }
     else if(fallo && fallo.code==='revoked'){ nubeEstado('login','Sin permiso: inicia sesión de nuevo o revisa tu usuario'); }
-    else if(fallo){ nubeEstado('error','Sin conexión: se reintentará solo'); clearTimeout(Cloud.retry); Cloud.retry=setTimeout(nubeProgramar, fallo.code==='resource_exhausted'?8000:15000); }
+    else if(fallo){ Cloud.pendientes=ops.length-hechos; nubeEstado('offline','Sin conexión: '+Cloud.pendientes+' cambio(s) pendientes, se enviarán solos'); programarReintento(); }
     else if(Cloud.malos.size){ nubeEstado('error',Cloud.malos.size+' registro(s) no se pudieron guardar (revisa tus permisos o el tamaño)'); }
-    else { Cloud.ultima=new Date(); nubeEstado('ok'); }
-  } finally { Cloud.corriendo=false; if(Cloud.otra) nubeProgramar(); }
+    else { Cloud.pendientes=0; Cloud.backoff=0; Cloud.ultima=new Date(); nubeEstado('ok'); }
+  } finally { if(cambioSnap) persistirSnap(); Cloud.corriendo=false; if(Cloud.otra) nubeProgramar(); }
 }
 async function leerColeccion(db,nombre){
   const out=[]; let ultimo=null;
@@ -1474,19 +1489,26 @@ function refrescarTodo(){
   const v=document.querySelector('.view.active'); if(v) cambiarVista(v.id.replace('view-',''));
 }
 async function cargarDeNube(db){
-  nubeEstado('cargando','Cargando datos de la nube...');
+  nubeEstado('cargando','Cargando datos...');
   if(localStorage.getItem('abarrotesDB_pre_nube')===null){ try{ localStorage.setItem('abarrotesDB_pre_nube', JSON.stringify(DB)); }catch(e){} }
-  const nuevo={};
-  for(const c of COLS) nuevo[c]=await leerColeccion(db,c);
-  const cfg=await db.doc('config/main').get();
-  nuevo.config = cfg.exists ? JSON.parse(JSON.stringify(cfg.data())) : Object.assign({},DB.config);
-  delete nuevo.config.id;
-  Cloud.snap={};
-  COLS.forEach(c=>nuevo[c].forEach(d=>{ Cloud.snap[c+'/'+d.id]=JSON.stringify(d); }));
-  Cloud.snap['config/main']=JSON.stringify(Object.assign({id:'main'},nuevo.config));
+  const nube={};
+  for(const c of COLS) (await leerColeccion(db,c)).forEach(d=>{ nube[c+'/'+d.id]=d; });
+  const cfg=await db.doc('config/main').get(); if(cfg.exists) nube['config/main']=JSON.parse(JSON.stringify(cfg.data()));
+  const H=snapGuardado(), local=docsDeseados(), res={}; Cloud.snap={};
+  const hl=k=>hashStr(JSON.stringify(local[k]));
+  Object.keys(nube).forEach(k=>{
+    Cloud.snap[k]=hashStr(JSON.stringify(nube[k]));
+    if(!H){ res[k]=nube[k]; return; }                       // dispositivo sin historial: manda la nube
+    if(!(k in local)){ if(!(k in H)) res[k]=nube[k]; return; } // borrado aquí sin conexión: se borrará en la nube
+    res[k]=(hl(k)!==H[k]) ? local[k] : nube[k];              // modificado aquí sin conexión: se conserva y se envía
+  });
+  if(H) Object.keys(local).forEach(k=>{ if(!(k in nube) && (!(k in H) || hl(k)!==H[k])) res[k]=local[k]; }); // nuevos aquí
+  const nuevo={}; COLS.forEach(c=>{ nuevo[c]=[]; });
+  Object.keys(res).forEach(k=>{ const c=k.split('/')[0]; if(nuevo[c]) nuevo[c].push(res[k]); });
+  nuevo.config=Object.assign({}, res['config/main']||DB.config); delete nuevo.config.id;
   DB=nuevo; normalizarDB();
   try{ localStorage.setItem('abarrotesDB', JSON.stringify(DB)); }catch(e){}
-  Cloud.malos=new Set();
+  persistirSnap(); Cloud.malos=new Set();
 }
 function crearSupabaseDb(url,key){
   let ses=null; try{ ses=JSON.parse(localStorage.getItem('sbSesion')||'null'); }catch(e){}
@@ -1529,8 +1551,13 @@ async function intentarSupabase(){
     const r=await fetch('config.json',{signal:ctrl.signal}); clearTimeout(t);
     if(!r.ok) return null;
     const c=await r.json(); if(!c || !c.supabaseUrl || !c.supabaseKey) return null;
+    try{ localStorage.setItem('posflowCfg',JSON.stringify(c)); }catch(e){}
     return crearSupabaseDb(String(c.supabaseUrl).replace(/\/+$/,''), c.supabaseKey);
-  }catch(e){ clearTimeout(t); return null; }
+  }catch(e){
+    clearTimeout(t);
+    try{ if(localStorage.getItem('posflowBackend')==='supabase'){ const c=JSON.parse(localStorage.getItem('posflowCfg')||'null'); if(c && c.supabaseUrl && c.supabaseKey) return crearSupabaseDb(String(c.supabaseUrl).replace(/\/+$/,''), c.supabaseKey); } }catch(e2){}
+    return null;
+  }
 }
 function abrirLogin(){ document.getElementById('lgError').textContent=''; abrirModal('ovLogin'); }
 async function entrarSupabase(){
@@ -1572,7 +1599,11 @@ async function intentarPg(){
     let tok=localStorage.getItem('abarrotesToken')||'';
     if(j.requiereToken && !tok){ tok=(window.prompt('Código de acceso de la tienda:')||'').trim(); try{ localStorage.setItem('abarrotesToken',tok); }catch(e){} }
     return crearPgDb(tok);
-  }catch(e){ clearTimeout(t); return null; }
+  }catch(e){
+    clearTimeout(t);
+    try{ if(localStorage.getItem('posflowBackend')==='pg' && localStorage.getItem('abarrotesToken')!==null) return crearPgDb(localStorage.getItem('abarrotesToken')||''); }catch(e2){}
+    return null;
+  }
 }
 async function iniciarNube(){
   if(Cloud.cargando) return; Cloud.cargando=true; nubeEstado('cargando','Conectando...');
@@ -1586,11 +1617,16 @@ async function iniciarNube(){
   if(Cloud.tipo==='supabase' && !db.tieneSesion()){ Cloud.cargando=false; nubeEstado('login','Inicia sesión para conectar con Supabase'); abrirLogin(); return; }
   try{
     const meta=await db.doc('meta/estado').get();
-    if(meta.exists){ await cargarDeNube(db); Cloud.listo=true; Cloud.ultima=new Date(); nubeEstado('ok'); refrescarTodo(); nubeProgramar(); }
+    if(meta.exists){ await cargarDeNube(db); Cloud.listo=true; Cloud.backoff=0; Cloud.ultima=new Date(); recordarBackend(); nubeEstado('ok'); refrescarTodo(); nubeProgramar(); }
     else { nubeEstado('vacia','La nube está vacía: falta subir los datos de este dispositivo'); }
   }catch(e){
-    Cloud.listo=false; nubeEstado('error','No se pudo conectar con la base de datos'); clearTimeout(Cloud.retry);
-    Cloud.retry=setTimeout(()=>{ Cloud.cargando=false; iniciarNube(); },20000);
+    Cloud.listo=false;
+    if(e && e.code==='revoked'){
+      Cloud.cargando=false;
+      if(Cloud.tipo==='supabase'){ nubeEstado('login','Vuelve a iniciar sesión'); abrirLogin(); } else nubeEstado('error','Código de acceso incorrecto: toca Sincronizar ahora para escribirlo de nuevo');
+      return;
+    }
+    nubeEstado('offline','Sin conexión: puedes seguir vendiendo, se sincronizará solo'); programarReintento();
   }
   Cloud.cargando=false;
 }
@@ -1605,7 +1641,7 @@ async function subirANube(){
     await nubeSync();
     if(Cloud.estado!=='ok'){ Cloud.listo=false; return; }
     await Cloud.db.doc('meta/estado').set({migrado:true, version:1, fecha:Date.now(), docs:Object.keys(docsDeseados()).length});
-    toast('Datos subidos a la nube');
+    recordarBackend(); toast('Datos subidos a la nube');
   }catch(e){ Cloud.listo=false; nubeEstado('error','No se pudo subir los datos'); }
 }
 function nubeSincronizarYa(){
@@ -1619,12 +1655,13 @@ function abrirDatos(){ renderDatos(); abrirModal('ovDatos'); }
 function renderDatos(){
   const el=document.getElementById('datosEstado'); if(!el) return;
   const n=Object.keys(docsDeseados()).length;
-  const est=({local:'💾 Solo en este dispositivo',cargando:'⏳ Conectando…',sync:'🔄 Guardando en la nube…',ok:'☁️ Sincronizado con '+(({pg:'PostgreSQL',supabase:'Supabase'})[Cloud.tipo]||'la nube'),error:'⚠️ Con problemas',cuota:'⛔ Base de datos llena',vacia:'📤 La nube está vacía',login:'🔑 Falta iniciar sesión'})[Cloud.estado]||'';
+  const est=({local:'💾 Solo en este dispositivo',cargando:'⏳ Conectando…',sync:'🔄 Guardando en la nube…',ok:'☁️ Sincronizado con '+(({pg:'PostgreSQL',supabase:'Supabase'})[Cloud.tipo]||'la nube'),error:'⚠️ Con problemas',cuota:'⛔ Base de datos llena',vacia:'📤 La nube está vacía',login:'🔑 Falta iniciar sesión',offline:'📴 Sin conexión (trabajando en este dispositivo)'})[Cloud.estado]||'';
   let h='<div style="font-size:16px;font-weight:700;">'+est+'</div>';
   if(Cloud.msg) h+='<div class="lr-sub">'+escapeHtml(Cloud.msg)+'</div>';
   h+='<div class="lr-sub" style="margin-top:8px;">Documentos: '+n+(Cloud.tipo==='claude'?' de 25,000':'')+' · Última sincronización: '+(Cloud.ultima?fmtFH(Cloud.ultima):'—')+'</div>';
   if(n>20000 && Cloud.tipo==='claude') h+='<div class="lr-sub" style="color:var(--rojo);font-weight:700;">Cerca del límite de la base de datos: hay que archivar ventas antiguas.</div>';
   if(Cloud.estado==='vacia') h+='<button class="btn-big" style="margin:12px 0 0;" onclick="subirANube()">☁️ Subir los datos de este dispositivo</button><div class="lr-sub">Hazlo desde el dispositivo que tiene tus datos reales.</div>';
+  if(Cloud.pendientes) h+='<div class="lr-sub" style="margin-top:6px;font-weight:700;">Cambios pendientes de enviar: '+Cloud.pendientes+'</div>';
   h+='<div class="lr-sub" style="margin-top:10px;">Por ahora usa la app en un solo dispositivo a la vez.</div>';
   if(Cloud.tipo==='supabase' && Cloud.db && Cloud.db.tieneSesion && Cloud.db.tieneSesion()) h+='<button class="btn-wide" style="margin-top:10px;" onclick="cerrarSesion()">Cerrar sesión</button>';
   h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 1.0 (13/11/2026)</div>';
@@ -1695,6 +1732,10 @@ document.getElementById('scanCant').addEventListener('keydown',e=>{
 
 renderProdGrid();
 enfocarEscaner();
+window.addEventListener('offline',()=>{ toast('Sin conexión: sigues vendiendo, se sincronizará solo'); if(Cloud.listo) nubeProgramar(); });
+window.addEventListener('online',()=>{ toast('Conexión restablecida: sincronizando...'); Cloud.backoff=0; clearTimeout(Cloud.retry); if(!Cloud.cargando) reconectar(); });
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && (Cloud.estado==='offline'||Cloud.estado==='error')) reconectar(); });
+try{ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){}
 iniciarNube();
 </script>
 </body>
