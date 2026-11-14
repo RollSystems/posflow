@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mi Tienda</title>
+<title>PosFlow</title>
 <style>
 :root{
   --verde:#2E7D4F; --verde-d:#1F5C38; --naranja:#D9822B; --rojo:#C0392B; --azul:#2E6E9E;
@@ -165,7 +165,7 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
 <body>
 
 <header>
-  <h1 id="hNombre">🛒 Mi Tienda</h1>
+  <div><h1 id="hNombre">🛒 PosFlow</h1><div class="fecha" id="hNegocio" style="margin-top:2px;"></div></div>
   <div style="display:flex;align-items:center;gap:12px;"><span class="fecha" id="fechaHoy"></span><button class="cfg-btn" id="nubeBtn" onclick="abrirDatos()" aria-label="Datos y respaldo">💾</button><button class="cfg-btn" onclick="abrirCfg()" aria-label="Configuración">⚙️</button></div>
 </header>
 
@@ -933,8 +933,8 @@ const CFG_DEF={nombre:'Mi Tienda',nit:'',direccion:'',tel:'',logo:'',papel:'80',
 DB.config = Object.assign({}, CFG_DEF, DB.config||{});
 let cfgTmp={}, ticketActual=null;
 function aplicarConfig(){
-  document.getElementById('hNombre').textContent='🛒 '+(DB.config.nombre||'Mi Tienda');
-  document.title=DB.config.nombre||'Mi Tienda';
+  document.getElementById('hNegocio').textContent=DB.config.nombre||'Mi Tienda';
+  document.title='PosFlow';
   document.getElementById('fechaHoy').textContent=hoyStr()+' · '+nombreBodega(DB.config.bodega);
   const w=DB.config.papel==='58'?58:80;
   let s=document.getElementById('pageStyle');
@@ -1630,8 +1630,8 @@ function renderDatos(){
 async function respaldoDescargar(){
   const json=JSON.stringify({app:'tienda-abarrotes', version:1, fecha:Date.now(), datos:DB});
   let dl=null; try{ dl=(window.claude && window.claude.use) ? await window.claude.use('downloads') : null; }catch(e){}
-  if(!dl){ try{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download='respaldo-tienda-'+hoyISO()+'.json'; a.click(); toast('Respaldo descargado'); }catch(e){ toast('La descarga no está disponible aquí'); } return; }
-  try{ await dl.save({filename:'respaldo-tienda-'+hoyISO()+'.json', data:json}); toast('Respaldo listo'); }
+  if(!dl){ try{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download='respaldo-posflow-'+hoyISO()+'.json'; a.click(); toast('Respaldo descargado'); }catch(e){ toast('La descarga no está disponible aquí'); } return; }
+  try{ await dl.save({filename:'respaldo-posflow-'+hoyISO()+'.json', data:json}); toast('Respaldo listo'); }
   catch(e){ if(!(e && e.code==='declined')) toast('No se pudo guardar el respaldo'); }
 }
 let respaldoPend=null;
