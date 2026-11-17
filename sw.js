@@ -1,5 +1,5 @@
 // PosFlow - service worker: permite abrir la app sin internet.
-const V = 'posflow-v1';
+const V = 'posflow-v2';
 const LIBS = [
   'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
@@ -7,7 +7,7 @@ const LIBS = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(V)
-      .then((c) => Promise.all(['./', 'index.html'].concat(LIBS).map((u) => c.add(u).catch(() => {}))))
+      .then((c) => Promise.all(['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'].concat(LIBS).map((u) => c.add(u).catch(() => {}))))
       .then(() => self.skipWaiting())
   );
 });

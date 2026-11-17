@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F5C38">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PosFlow">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>PosFlow</title>
 <style>
 :root{
@@ -127,6 +134,8 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
 .ticket .r{display:flex;justify-content:space-between;gap:6px}.ticket .n{flex:1}
 .ticket hr{border:0;border-top:1px dashed #000;margin:6px 0}
 .ticket img{max-width:100%;display:block;margin:0 auto 4px}
+body.rol-cajero .solo-dueno,body.rol-lectura .solo-dueno{display:none!important}
+body.rol-lectura .no-lectura{display:none!important}
 .cfg-btn{background:rgba(255,255,255,.15);border:none;border-radius:10px;font-size:22px;width:44px;height:44px;color:#fff;cursor:pointer}
 .btn-big{width:100%;padding:16px;border:none;border-radius:12px;background:var(--verde);color:#fff;font-size:16px;font-weight:700;font-family:inherit;margin-bottom:12px}
 .btn-wide{width:100%;padding:13px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;font-size:15px}
@@ -166,18 +175,18 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
 
 <header>
   <div><h1 id="hNombre">🛒 PosFlow</h1><div class="fecha" id="hNegocio" style="margin-top:2px;"></div></div>
-  <div style="display:flex;align-items:center;gap:12px;"><span class="fecha" id="fechaHoy"></span><button class="cfg-btn" id="nubeBtn" onclick="abrirDatos()" aria-label="Datos y respaldo">💾</button><button class="cfg-btn" onclick="abrirCfg()" aria-label="Configuración">⚙️</button></div>
+  <div style="display:flex;align-items:center;gap:12px;"><span class="fecha" id="fechaHoy"></span><button class="cfg-btn" id="nubeBtn" onclick="abrirDatos()" aria-label="Datos y respaldo">💾</button><button class="cfg-btn solo-dueno" onclick="abrirCfg()" aria-label="Configuración">⚙️</button></div>
 </header>
 
 <main>
 
   <!-- VENTA -->
   <section class="view active" id="view-venta">
-    <div class="scan-bar"><span style="font-size:22px;">🔎</span><input id="scanInput" inputmode="none" placeholder="Escanea o escribe el código del producto" autocomplete="off"><input id="scanCant" class="cant-in" type="text" inputmode="numeric" placeholder="Cant." autocomplete="off"><button class="kb-btn" id="btnKb" onclick="toggleKb()" aria-label="Mostrar teclado">⌨️</button></div>
+    <div class="scan-bar no-lectura"><span style="font-size:22px;">🔎</span><input id="scanInput" inputmode="none" placeholder="Escanea o escribe el código del producto" autocomplete="off"><input id="scanCant" class="cant-in" type="text" inputmode="numeric" placeholder="Cant." autocomplete="off"><button class="kb-btn" id="btnKb" onclick="toggleKb()" aria-label="Mostrar teclado">⌨️</button></div>
     <h2 class="section-title">O toca un producto para agregarlo</h2>
-    <div class="prod-grid" id="prodGrid"></div>
+    <div class="prod-grid no-lectura" id="prodGrid"></div>
 
-    <div class="cart-box card" id="cartBox" style="display:none;">
+    <div class="cart-box card no-lectura" id="cartBox" style="display:none;">
       <h2 class="section-title" style="margin-top:0;">Carrito</h2>
       <div class="cart-items" id="cartItems"></div>
       <div class="cart-total"><span>Total</span><span id="cartTotal">Q0.00</span></div>
@@ -192,7 +201,7 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
 
   <!-- INVENTARIO -->
   <section class="view" id="view-inv">
-    <div class="grid2" style="margin-bottom:12px;">
+    <div class="grid2 solo-dueno" style="margin-bottom:12px;">
       <button class="btn-big" style="margin-bottom:0;" onclick="abrirIngreso()">📥 Ingreso a bodega</button>
       <button class="btn-big" style="margin-bottom:0;background:var(--naranja);" onclick="abrirSalida()">📤 Salida de inventario</button>
     </div>
@@ -241,7 +250,7 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
 
 </main>
 
-<button class="fab" id="fabAdd" onclick="abrirFab()">+</button>
+<button class="fab no-lectura" id="fabAdd" onclick="abrirFab()">+</button>
 
 <nav class="tabs">
   <button class="active" data-v="venta" onclick="cambiarVista('venta')"><span class="ic">🛒</span>Venta</button>
@@ -347,7 +356,8 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
     <div class="field"><label>Correo</label><input id="lgEmail" type="email" autocomplete="username"></div>
     <div class="field"><label>Contraseña</label><input id="lgPass" type="password" autocomplete="current-password"></div>
     <div id="lgError" style="color:var(--rojo);font-size:13px;min-height:18px;"></div>
-    <div class="modal-actions"><button class="btn-primary" onclick="entrarSupabase()">Entrar</button></div>
+    <div class="modal-actions"><button class="btn-primary" onclick="entrarSupabase()">Entrar</button><button class="btn-secondary" onclick="registrarSupabase()">Crear cuenta</button></div>
+    <div style="text-align:center;margin-top:10px;"><a href="#" style="color:var(--azul);font-size:13px;" onclick="recuperarSupabase();return false;">Olvidé mi contraseña</a></div>
   </div>
 </div>
 
@@ -360,11 +370,42 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
     <h2 class="section-title">Respaldo manual</h2>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="respaldoDescargar()">⬇️ Descargar respaldo</button>
-      <button class="btn-secondary" onclick="respaldoElegir()">⬆️ Restaurar</button>
+      <button class="btn-secondary solo-dueno" onclick="respaldoElegir()">⬆️ Restaurar</button>
     </div>
     <input type="file" id="respaldoFile" accept=".json,application/json" style="display:none;" onchange="respaldoLeer(this)">
     <button class="btn-danger" id="btnRestConf" style="display:none;width:100%;padding:13px;border:none;border-radius:10px;font-family:inherit;font-weight:600;margin-top:10px;" onclick="respaldoAplicar()">Confirmar</button>
     <div class="modal-actions"><button class="btn-secondary" onclick="cerrarModal('ovDatos')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal negocios -->
+<div class="overlay" id="ovNegocio">
+  <div class="modal">
+    <h3>🏪 Tu negocio</h3>
+    <div class="card" style="padding:0;" id="negLista"></div>
+    <h2 class="section-title">Crear un negocio nuevo</h2>
+    <div class="field"><input id="negNombre" placeholder="Nombre del negocio" autocomplete="off"></div>
+    <label id="negImpWrap" style="display:none;font-size:13px;margin-bottom:8px;"><input type="checkbox" id="negImportar"> Importar los datos que ya tengo en este dispositivo (<span id="negImpN"></span> productos)</label>
+    <div class="modal-actions"><button class="btn-primary" onclick="crearNegocioUI()">Crear negocio</button></div>
+    <h2 class="section-title">Unirme a un negocio con código</h2>
+    <div class="field"><input id="negCodigo" placeholder="Código de invitación" autocapitalize="characters" autocomplete="off"></div>
+    <div class="modal-actions"><button class="btn-secondary" onclick="unirseUI()">Unirme</button></div>
+    <div id="negError" style="color:var(--rojo);font-size:13px;min-height:18px;margin-top:8px;"></div>
+    <div class="modal-actions"><button class="btn-secondary" id="negCerrar" onclick="cerrarModal('ovNegocio')">Cerrar</button><button class="btn-secondary" onclick="cerrarSesion()">Cerrar sesión</button></div>
+  </div>
+</div>
+
+<!-- Modal usuarios -->
+<div class="overlay" id="ovUsuarios">
+  <div class="modal">
+    <h3>👥 Usuarios y accesos</h3>
+    <div class="card" style="padding:0;" id="usrLista"></div>
+    <h2 class="section-title">Invitar a alguien</h2>
+    <div class="field"><label>Rol</label><select id="usrRol"><option value="cajero">Cajero (vende y cobra)</option><option value="lectura">Solo lectura (consulta)</option></select></div>
+    <div class="modal-actions"><button class="btn-primary" onclick="invitar()">Generar código</button></div>
+    <div id="usrCodigo" style="font-size:28px;font-weight:800;letter-spacing:4px;text-align:center;margin:12px 0;"></div>
+    <div class="lr-sub">El código sirve una sola vez y vence en 7 días. La persona crea su cuenta en PosFlow y elige “Unirme a un negocio con código”.</div>
+    <div class="modal-actions"><button class="btn-secondary" onclick="cerrarModal('ovUsuarios')">Cerrar</button></div>
   </div>
 </div>
 
@@ -497,29 +538,17 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
 <div id="toast"></div>
 
 <script>
+let LS_NEG=null; try{ LS_NEG=localStorage.getItem('posflowNegocio'); }catch(e){}
+function lsK(n){ return LS_NEG ? 'pf:'+LS_NEG+':'+n : n; }
 let DB = {productos:[], clientes:[], ventas:[], pagos:[]};
-try{ const raw = localStorage.getItem('abarrotesDB'); if(raw) DB = JSON.parse(raw); }catch(e){}
-function guardar(){ try{ localStorage.setItem('abarrotesDB', JSON.stringify(DB)); }catch(e){} if(typeof nubeProgramar==='function') nubeProgramar(); }
+try{ const raw = localStorage.getItem(lsK('abarrotesDB')); if(raw) DB = JSON.parse(raw); }catch(e){}
+function guardar(){ try{ localStorage.setItem(lsK('abarrotesDB'), JSON.stringify(DB)); }catch(e){} if(typeof nubeProgramar==='function') nubeProgramar(); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function fmtQ(n){ return 'Q'+(Math.round(n*100)/100).toFixed(2); }
 function hoyStr(){ const d=new Date(); return d.toLocaleDateString('es-GT',{weekday:'long',day:'numeric',month:'long'}); }
 function esHoy(ts){ const a=new Date(ts), b=new Date(); return a.toDateString()===b.toDateString(); }
 document.getElementById('fechaHoy').textContent = hoyStr();
 
-// seed demo si está vacío
-if(DB.productos.length===0 && DB.clientes.length===0 && DB.ventas.length===0){
-  DB.productos=[
-    {id:uid(),nombre:'Arroz 1lb',precio:6,stock:24},
-    {id:uid(),nombre:'Frijol 1lb',precio:7,stock:18},
-    {id:uid(),nombre:'Azúcar 1lb',precio:5,stock:30},
-    {id:uid(),nombre:'Aceite 1L',precio:22,stock:10},
-    {id:uid(),nombre:'Huevos (cartón)',precio:28,stock:8},
-    {id:uid(),nombre:'Jabón de baño',precio:4,stock:40},
-    {id:uid(),nombre:'Coca-Cola 600ml',precio:8,stock:35},
-    {id:uid(),nombre:'Pan de molde',precio:14,stock:3},
-  ];
-  guardar();
-}
 
 let cart = []; // {prodId, cant}
 let pagoTipo = 'contado';
@@ -1156,7 +1185,7 @@ function sigSalida(){ return DB.salidas.reduce((m,x)=>Math.max(m,x.num||0),0)+1;
 // ---------- anulaciones ----------
 function bloqueAnular(g,fn){
   if(g.anulado) return '<div class="hist-row" style="color:var(--rojo);font-weight:700;">ANULADO el '+new Date(g.anuladoFecha).toLocaleDateString('es-GT')+(g.anuladoMotivo?' · '+escapeHtml(g.anuladoMotivo):'')+'</div>';
-  return '<div class="field" style="margin-top:14px;"><label>Anular (revierte la existencia)</label><input id="anuMotivo" placeholder="Motivo de la anulación"></div><button class="btn-danger" style="width:100%;padding:13px;border:none;border-radius:10px;font-family:inherit;font-weight:600;" onclick="'+fn+'(\''+g.id+'\')">Anular</button>';
+  return '<div class="field solo-dueno" style="margin-top:14px;"><label>Anular (revierte la existencia)</label><input id="anuMotivo" placeholder="Motivo de la anulación"></div><button class="btn-danger solo-dueno" style="width:100%;padding:13px;border:none;border-radius:10px;font-family:inherit;font-weight:600;" onclick="'+fn+'(\''+g.id+'\')">Anular</button>';
 }
 function anularIngreso(id){
   const g=DB.ingresos.find(x=>x.id===id); if(!g || g.anulado) return;
@@ -1406,6 +1435,12 @@ function nubeProgramar(){
   if(typeof Cloud==='undefined' || !Cloud.listo) return;
   clearTimeout(Cloud.timer); Cloud.timer=setTimeout(nubeSync,700);
 }
+function puedeEscribirClave(k){
+  if(Cloud.tipo!=='supabase') return true;
+  if(Cloud.soloLectura || Cloud.rol==='lectura') return false;
+  if(Cloud.rol==='dueno') return true;
+  return ['productos','clientes','ventas','pagos'].indexOf(String(k).split('/')[0])>=0;
+}
 function hashStr(str){
   let h1=0xdeadbeef,h2=0x41c6ce57;
   for(let i=0;i<str.length;i++){ const c=str.charCodeAt(i); h1=Math.imul(h1^c,2654435761); h2=Math.imul(h2^c,1597334677); }
@@ -1413,8 +1448,8 @@ function hashStr(str){
   h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
   return 4294967296*(2097151&h2)+(h1>>>0);
 }
-function persistirSnap(){ try{ localStorage.setItem('posflowSnap',JSON.stringify({tipo:Cloud.tipo,h:Cloud.snap})); }catch(e){} }
-function snapGuardado(){ try{ const j=JSON.parse(localStorage.getItem('posflowSnap')||'null'); return (j && j.tipo===Cloud.tipo && j.h) ? j.h : null; }catch(e){ return null; } }
+function persistirSnap(){ try{ localStorage.setItem(lsK('posflowSnap'),JSON.stringify({tipo:Cloud.tipo,h:Cloud.snap})); }catch(e){} }
+function snapGuardado(){ try{ const j=JSON.parse(localStorage.getItem(lsK('posflowSnap'))||'null'); return (j && j.tipo===Cloud.tipo && j.h) ? j.h : null; }catch(e){ return null; } }
 function recordarBackend(){ try{ if(Cloud.tipo==='pg'||Cloud.tipo==='supabase') localStorage.setItem('posflowBackend',Cloud.tipo); }catch(e){} }
 function programarReintento(){
   clearTimeout(Cloud.retry); Cloud.backoff=Math.min((Cloud.backoff||0)*2||5000,60000);
@@ -1428,8 +1463,8 @@ async function nubeSync(){
   let cambioSnap=false;
   try{
     const des=docsDeseados(), ops=[];
-    for(const k in des){ if(Cloud.malos.has(k)) continue; const t=JSON.stringify(des[k]), h=hashStr(t); if(Cloud.snap[k]!==h) ops.push({k,t,h,tipo:'set'}); }
-    for(const k in Cloud.snap){ if(!(k in des)) ops.push({k,tipo:'del'}); }
+    for(const k in des){ if(Cloud.malos.has(k) || !puedeEscribirClave(k)) continue; const t=JSON.stringify(des[k]), h=hashStr(t); if(Cloud.snap[k]!==h) ops.push({k,t,h,tipo:'set'}); }
+    for(const k in Cloud.snap){ if(!(k in des) && puedeEscribirClave(k)) ops.push({k,tipo:'del'}); }
     Cloud.pendientes=ops.length;
     if(!ops.length){ if(Cloud.estado!=='cuota' && Cloud.malos.size===0){ Cloud.backoff=0; if(!Cloud.ultima) Cloud.ultima=new Date(); nubeEstado('ok'); } return; }
     if(typeof navigator!=='undefined' && navigator.onLine===false){ nubeEstado('offline','Sin conexión: '+ops.length+' cambio(s) pendientes, se enviarán solos'); return; }
@@ -1443,7 +1478,7 @@ async function nubeSync(){
           const ref=Cloud.db.doc(op.k);
           if(op.tipo==='set') await ref.set(JSON.parse(op.t)); else await ref.delete();
           hecho(op); hechos++; if(ops.length>20) nubeEstado('sync','Guardando '+hechos+' de '+ops.length+'...');
-        }catch(e){ if(e && e.code==='invalid_argument'){ Cloud.malos.add(op.k); } else fallo=e||{code:'unavailable'}; }
+        }catch(e){ if(e && (e.code==='invalid_argument'||e.code==='forbidden')){ Cloud.malos.add(op.k); } else fallo=e||{code:'unavailable'}; }
       }
     };
     const porLotes=async()=>{
@@ -1452,7 +1487,7 @@ async function nubeSync(){
         try{
           await Cloud.db.lote(parte.map(o=>o.tipo==='set'?{tipo:'set',k:o.k,data:JSON.parse(o.t)}:{tipo:'del',k:o.k}));
           parte.forEach(hecho); hechos+=parte.length; if(ops.length>20) nubeEstado('sync','Guardando '+hechos+' de '+ops.length+'...');
-        }catch(e){ if(e && e.code==='invalid_argument') parte.forEach(o=>Cloud.malos.add(o.k)); else fallo=e||{code:'unavailable'}; }
+        }catch(e){ if(e && (e.code==='invalid_argument'||e.code==='forbidden')) parte.forEach(o=>Cloud.malos.add(o.k)); else fallo=e||{code:'unavailable'}; }
       }
     };
     if(Cloud.db.lote) await porLotes(); else await Promise.all([worker(),worker(),worker(),worker()]);
@@ -1490,7 +1525,7 @@ function refrescarTodo(){
 }
 async function cargarDeNube(db){
   nubeEstado('cargando','Cargando datos...');
-  if(localStorage.getItem('abarrotesDB_pre_nube')===null){ try{ localStorage.setItem('abarrotesDB_pre_nube', JSON.stringify(DB)); }catch(e){} }
+  if(localStorage.getItem(lsK('abarrotesDB_pre_nube'))===null){ try{ localStorage.setItem(lsK('abarrotesDB_pre_nube'), JSON.stringify(DB)); }catch(e){} }
   const nube={};
   for(const c of COLS) (await leerColeccion(db,c)).forEach(d=>{ nube[c+'/'+d.id]=d; });
   const cfg=await db.doc('config/main').get(); if(cfg.exists) nube['config/main']=JSON.parse(JSON.stringify(cfg.data()));
@@ -1499,49 +1534,62 @@ async function cargarDeNube(db){
   Object.keys(nube).forEach(k=>{
     Cloud.snap[k]=hashStr(JSON.stringify(nube[k]));
     if(!H){ res[k]=nube[k]; return; }                       // dispositivo sin historial: manda la nube
-    if(!(k in local)){ if(!(k in H)) res[k]=nube[k]; return; } // borrado aquí sin conexión: se borrará en la nube
-    res[k]=(hl(k)!==H[k]) ? local[k] : nube[k];              // modificado aquí sin conexión: se conserva y se envía
+    if(!(k in local)){ if(!(k in H) || !puedeEscribirClave(k)) res[k]=nube[k]; return; } // borrado aquí sin conexión: se borrará en la nube
+    res[k]=(puedeEscribirClave(k) && hl(k)!==H[k]) ? local[k] : nube[k];              // modificado aquí sin conexión: se conserva y se envía
   });
-  if(H) Object.keys(local).forEach(k=>{ if(!(k in nube) && (!(k in H) || hl(k)!==H[k])) res[k]=local[k]; }); // nuevos aquí
+  if(H) Object.keys(local).forEach(k=>{ if(!(k in nube) && puedeEscribirClave(k) && (!(k in H) || hl(k)!==H[k])) res[k]=local[k]; }); // nuevos aquí
   const nuevo={}; COLS.forEach(c=>{ nuevo[c]=[]; });
   Object.keys(res).forEach(k=>{ const c=k.split('/')[0]; if(nuevo[c]) nuevo[c].push(res[k]); });
   nuevo.config=Object.assign({}, res['config/main']||DB.config); delete nuevo.config.id;
   DB=nuevo; normalizarDB();
-  try{ localStorage.setItem('abarrotesDB', JSON.stringify(DB)); }catch(e){}
+  try{ localStorage.setItem(lsK('abarrotesDB'), JSON.stringify(DB)); }catch(e){}
   persistirSnap(); Cloud.malos=new Set();
 }
 function crearSupabaseDb(url,key){
-  let ses=null; try{ ses=JSON.parse(localStorage.getItem('sbSesion')||'null'); }catch(e){}
+  let ses=null, neg=null; try{ ses=JSON.parse(localStorage.getItem('sbSesion')||'null'); }catch(e){}
   const setSes=x=>{ ses=x; try{ x?localStorage.setItem('sbSesion',JSON.stringify(x)):localStorage.removeItem('sbSesion'); }catch(e){} };
+  const guardarSes=j=>setSes({access:j.access_token, refresh:j.refresh_token, exp:Date.now()+Math.max(60,(j.expires_in||3600)-60)*1000});
+  const post=async(path,body)=>{ const r=await fetch(url+path,{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json().catch(()=>({})); return {r,j}; };
+  const msg=j=>j.error_description||j.msg||j.message||'';
   const auth=async(body,modo)=>{
-    const r=await fetch(url+'/auth/v1/token?grant_type='+modo,{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok){ if(modo==='refresh_token') setSes(null); throw {code:'revoked', message:/invalid/i.test(j.error_description||j.msg||'')?'Correo o contraseña incorrectos':(j.error_description||j.msg||'No se pudo iniciar sesión')}; }
-    setSes({access:j.access_token, refresh:j.refresh_token, exp:Date.now()+Math.max(60,(j.expires_in||3600)-60)*1000});
+    const {r,j}=await post('/auth/v1/token?grant_type='+modo,body);
+    if(!r.ok){ if(modo==='refresh_token') setSes(null); throw {code:'revoked', message:/invalid/i.test(msg(j))?'Correo o contraseña incorrectos':(/confirm/i.test(msg(j))?'Confirma tu correo antes de entrar':(msg(j)||'No se pudo iniciar sesión'))}; }
+    guardarSes(j);
   };
   const token=async()=>{ if(!ses) throw {code:'revoked'}; if(Date.now()>ses.exp) await auth({refresh_token:ses.refresh},'refresh_token'); return ses.access; };
   const rest=async(path,opt)=>{
     const t=await token(); opt=opt||{};
     const r=await fetch(url+'/rest/v1/'+path,{method:opt.method||'GET', body:opt.body, headers:Object.assign({apikey:key,Authorization:'Bearer '+t,'Content-Type':'application/json'},opt.headers||{})});
-    if(r.status===401||r.status===403) throw {code:'revoked'};
-    if(r.status===400||r.status===413||r.status===422) throw {code:'invalid_argument'};
+    if(r.status===401) throw {code:'revoked'};
+    if(r.status===403) throw {code:'forbidden', message:'No tienes permiso para esta acción'};
+    if(r.status===400||r.status===413||r.status===422){ let m=''; try{ m=JSON.parse(await r.text()).message||''; }catch(e){} throw {code:'invalid_argument', message:m}; }
     if(!r.ok) throw {code:'unavailable'};
     const tx=await r.text(); return tx?JSON.parse(tx):null;
   };
+  const T=c=>'pf_'+c, N=()=>'negocio_id=eq.'+neg;
   const query=(col,after,lim)=>({
     where:(f,o,v)=>query(col,v,lim), orderBy:()=>query(col,after,lim), limit:n=>query(col,after,n),
-    async get(){ const a=await rest(col+'?select=data&order=id.asc&limit='+(lim||1000)+(after!=null?'&id=gt.'+encodeURIComponent(after):'')); const docs=(a||[]).map(x=>({id:x.data.id,exists:true,data:()=>x.data})); return {docs,size:docs.length}; }
+    async get(){ const a=await rest(T(col)+'?select=data&'+N()+'&order=id.asc&limit='+(lim||1000)+(after!=null?'&id=gt.'+encodeURIComponent(after):'')); const docs=(a||[]).map(x=>({id:x.data.id,exists:true,data:()=>x.data})); return {docs,size:docs.length}; }
   });
   return {
     tieneSesion:()=>!!ses,
     entrar:(email,password)=>auth({email,password},'password'),
     salir:()=>setSes(null),
+    setNegocio:id=>{ neg=id; },
+    async registrar(email,password){
+      const {r,j}=await post('/auth/v1/signup',{email,password});
+      if(!r.ok) throw {code:'invalid_argument', message:/already|registered/i.test(msg(j))?'Ese correo ya tiene cuenta: inicia sesión':(msg(j)||'No se pudo crear la cuenta')};
+      if(j.access_token){ guardarSes(j); return 'sesion'; }
+      return 'confirmar';
+    },
+    async recuperar(email){ const {r,j}=await post('/auth/v1/recover',{email}); if(!r.ok) throw {code:'invalid_argument', message:msg(j)||'No se pudo enviar el correo'}; },
+    rpc:(nombre,body)=>rest('rpc/'+nombre,{method:'POST',body:JSON.stringify(body||{})}),
     doc:path=>{ const [col,id]=path.split('/'); return {
-      async get(){ const a=await rest(col+'?select=data&id=eq.'+encodeURIComponent(id)); const d=a&&a[0]?a[0].data:null; return {id,exists:d!==null,data:()=>d}; },
-      set:d=>rest(col+'?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({id,data:d})}),
-      delete:()=>rest(col+'?id=eq.'+encodeURIComponent(id),{method:'DELETE'}) }; },
+      async get(){ const a=await rest(T(col)+'?select=data&'+N()+'&id=eq.'+encodeURIComponent(id)); const d=a&&a[0]?a[0].data:null; return {id,exists:d!==null,data:()=>d}; },
+      set:d=>rest(T(col)+'?on_conflict=negocio_id,id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({negocio_id:neg,id,data:d})}),
+      delete:()=>rest(T(col)+'?'+N()+'&id=eq.'+encodeURIComponent(id),{method:'DELETE'}) }; },
     collection:name=>query(name,null,null),
-    lote:ops=>rest('rpc/lote',{method:'POST',body:JSON.stringify({ops})})
+    lote:ops=>rest('rpc/pf_lote',{method:'POST',body:JSON.stringify({p_negocio:neg,ops})})
   };
 }
 async function intentarSupabase(){
@@ -1559,14 +1607,126 @@ async function intentarSupabase(){
     return null;
   }
 }
-function abrirLogin(){ document.getElementById('lgError').textContent=''; abrirModal('ovLogin'); }
+var ROLES={dueno:'Dueño',cajero:'Cajero',lectura:'Solo lectura'};
+function errLogin(m,ok){ const e=document.getElementById('lgError'); e.style.color=ok?'var(--verde-d)':'var(--rojo)'; e.textContent=m; }
+function abrirLogin(){ errLogin(''); abrirModal('ovLogin'); }
 async function entrarSupabase(){
   const em=document.getElementById('lgEmail').value.trim(), pw=document.getElementById('lgPass').value;
-  if(!em || !pw){ document.getElementById('lgError').textContent='Escribe tu correo y contraseña'; return; }
+  if(!em || !pw){ errLogin('Escribe tu correo y contraseña'); return; }
   try{ await Cloud.db.entrar(em,pw); document.getElementById('lgPass').value=''; cerrarModal('ovLogin'); Cloud.cargando=false; iniciarNube(); }
-  catch(e){ document.getElementById('lgError').textContent=(e && e.message) || 'No se pudo iniciar sesión'; }
+  catch(e){ errLogin((e && e.message) || 'No se pudo iniciar sesión'); }
 }
-function cerrarSesion(){ if(Cloud.db && Cloud.db.salir) Cloud.db.salir(); Cloud.listo=false; cerrarModal('ovDatos'); nubeEstado('login','Sesión cerrada'); abrirLogin(); }
+async function registrarSupabase(){
+  const em=document.getElementById('lgEmail').value.trim(), pw=document.getElementById('lgPass').value;
+  if(!em || pw.length<6){ errLogin('Escribe tu correo y una contraseña de 6 o más caracteres'); return; }
+  try{
+    const r=await Cloud.db.registrar(em,pw); document.getElementById('lgPass').value='';
+    if(r==='sesion'){ cerrarModal('ovLogin'); Cloud.cargando=false; iniciarNube(); }
+    else errLogin('Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.',true);
+  }catch(e){ errLogin((e && e.message) || 'No se pudo crear la cuenta'); }
+}
+async function recuperarSupabase(){
+  const em=document.getElementById('lgEmail').value.trim();
+  if(!em){ errLogin('Escribe tu correo arriba y vuelve a tocar'); return; }
+  try{ await Cloud.db.recuperar(em); errLogin('Te enviamos un correo para restablecer tu contraseña.',true); }
+  catch(e){ errLogin((e && e.message) || 'No se pudo enviar el correo'); }
+}
+function cerrarSesion(){
+  if(Cloud.pendientes>0 && !cerrarSesion.ok){ cerrarSesion.ok=true; toast('Hay '+Cloud.pendientes+' cambios sin enviar. Toca otra vez para cerrar sesión y perderlos'); return; }
+  cerrarSesion.ok=false;
+  if(Cloud.db && Cloud.db.salir) Cloud.db.salir();
+  try{ Object.keys(localStorage).filter(k=>/^pf:|^posflow/.test(k)).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+  try{ location.reload(); }catch(e){}
+}
+function aplicarRol(){
+  const b=document.body; if(!b) return;
+  b.classList.toggle('rol-cajero', Cloud.rol==='cajero');
+  b.classList.toggle('rol-lectura', Cloud.rol==='lectura' || !!Cloud.soloLectura);
+}
+function cambiarEspacioLocal(id){
+  LS_NEG=id; try{ localStorage.setItem('posflowNegocio',id); }catch(e){}
+  let d=null; try{ d=JSON.parse(localStorage.getItem(lsK('abarrotesDB'))||'null'); }catch(e){}
+  DB=d||{productos:[],clientes:[],ventas:[],pagos:[]};
+  normalizarDB(); cart=[]; Cloud.snap={}; Cloud.malos=new Set(); Cloud.listo=false; Cloud.pendientes=0;
+}
+function activarNegocio(n){
+  Cloud.db.setNegocio(n.id); Cloud.negocio=n.id; Cloud.negocioInfo=n; Cloud.rol=n.rol;
+  Cloud.soloLectura=!(n.estado==='activo' || (n.estado==='prueba' && n.vence && new Date(n.vence)>new Date()));
+  if(LS_NEG!==n.id) cambiarEspacioLocal(n.id);
+  aplicarRol();
+  if(Cloud.soloLectura && n.rol!=='lectura') toast('Tu prueba terminó o el negocio está suspendido: solo lectura');
+}
+async function elegirNegocio(db){
+  let lista;
+  try{ lista=await db.rpc('pf_mis_negocios'); try{ localStorage.setItem('posflowNegocios',JSON.stringify(lista)); }catch(e){} }
+  catch(e){
+    if(e && e.code==='revoked') throw e;
+    try{ lista=JSON.parse(localStorage.getItem('posflowNegocios')||'null'); }catch(e2){}
+    if(!lista) throw e;
+  }
+  Cloud.negocios=lista;
+  const guardado=(function(){ try{ return localStorage.getItem('posflowNegocio'); }catch(e){ return null; } })();
+  const n=lista.find(x=>x.id===guardado) || (lista.length===1 ? lista[0] : null);
+  if(!n){ abrirNegocios(); return false; }
+  activarNegocio(n); return true;
+}
+function abrirNegocios(){
+  const l=Cloud.negocios||[];
+  document.getElementById('negLista').innerHTML = l.length ? l.map(n=>'<div class="list-row" onclick="elegirNegocioId(\''+n.id+'\')"><div><div class="lr-main">'+escapeHtml(n.nombre)+'</div><div class="lr-sub">'+(ROLES[n.rol]||n.rol)+(n.estado==='prueba'?' · prueba':'')+(n.estado==='suspendido'?' · suspendido':'')+'</div></div>'+(n.id===Cloud.negocio?'<span class="badge ok">en uso</span>':'')+'</div>').join('') : '<div class="empty">Aún no perteneces a ningún negocio.</div>';
+  let leg=null; try{ leg=JSON.parse(localStorage.getItem('abarrotesDB')||'null'); }catch(e){}
+  const n=(leg && leg.productos) ? leg.productos.length : 0;
+  document.getElementById('negImpWrap').style.display = n ? 'block' : 'none';
+  document.getElementById('negImpN').textContent=n; document.getElementById('negImportar').checked=!!n;
+  document.getElementById('negError').textContent='';
+  document.getElementById('negCerrar').style.display = Cloud.negocio ? '' : 'none';
+  abrirModal('ovNegocio');
+}
+async function elegirNegocioId(id){
+  const n=(Cloud.negocios||[]).find(x=>x.id===id); if(!n) return;
+  if(Cloud.listo && Cloud.negocio && Cloud.negocio!==id){ try{ await nubeSync(); }catch(e){} }
+  cerrarModal('ovNegocio'); activarNegocio(n); Cloud.cargando=false; iniciarNube();
+}
+function errNeg(e){ document.getElementById('negError').textContent=(e && e.message) || 'No se pudo completar la acción'; }
+async function crearNegocioUI(){
+  const nombre=document.getElementById('negNombre').value.trim();
+  if(nombre.length<2){ errNeg({message:'Escribe el nombre del negocio'}); return; }
+  try{
+    const id=await Cloud.db.rpc('pf_crear_negocio',{p_nombre:nombre});
+    let leg=null; if(document.getElementById('negImportar').checked){ try{ leg=JSON.parse(localStorage.getItem('abarrotesDB')||'null'); }catch(e){} }
+    const lista=await Cloud.db.rpc('pf_mis_negocios'); Cloud.negocios=lista; try{ localStorage.setItem('posflowNegocios',JSON.stringify(lista)); }catch(e){}
+    activarNegocio(lista.find(x=>x.id===id));
+    if(leg && leg.productos){ DB=leg; }
+    normalizarDB(); if(!DB.config.nombre || DB.config.nombre==='PosFlow') DB.config.nombre=nombre;
+    guardar(); document.getElementById('negNombre').value=''; cerrarModal('ovNegocio');
+    Cloud.autoSubir=true; Cloud.cargando=false; iniciarNube();
+  }catch(e){ errNeg(e); }
+}
+async function unirseUI(){
+  const c=document.getElementById('negCodigo').value.trim();
+  if(!c){ errNeg({message:'Escribe el código de invitación'}); return; }
+  try{
+    const id=await Cloud.db.rpc('pf_unirse',{p_codigo:c});
+    const lista=await Cloud.db.rpc('pf_mis_negocios'); Cloud.negocios=lista; try{ localStorage.setItem('posflowNegocios',JSON.stringify(lista)); }catch(e){}
+    document.getElementById('negCodigo').value=''; cerrarModal('ovNegocio');
+    activarNegocio(lista.find(x=>x.id===id)); Cloud.cargando=false; iniciarNube();
+  }catch(e){ errNeg(e); }
+}
+async function abrirUsuarios(){ document.getElementById('usrCodigo').textContent=''; abrirModal('ovUsuarios'); await cargarMiembros(); }
+async function cargarMiembros(){
+  const w=document.getElementById('usrLista');
+  try{
+    const m=await Cloud.db.rpc('pf_miembros',{p_negocio:Cloud.negocio});
+    w.innerHTML=m.map(u=>'<div class="list-row"><div><div class="lr-main">'+escapeHtml(u.email||'')+'</div><div class="lr-sub">'+(ROLES[u.rol]||u.rol)+'</div></div>'+(u.rol==='dueno'?'':'<div class="qty-ctrl"><button onclick="quitarMiembro(\''+u.user_id+'\')">🗑️</button></div>')+'</div>').join('');
+  }catch(e){ w.innerHTML='<div class="empty">No se pudo cargar (¿sin conexión?)</div>'; }
+}
+async function invitar(){
+  try{ document.getElementById('usrCodigo').textContent=await Cloud.db.rpc('pf_crear_invitacion',{p_negocio:Cloud.negocio,p_rol:document.getElementById('usrRol').value}); }
+  catch(e){ toast((e && e.message) || 'No se pudo crear la invitación'); }
+}
+async function quitarMiembro(id){
+  try{ await Cloud.db.rpc('pf_quitar_miembro',{p_negocio:Cloud.negocio,p_user:id}); await cargarMiembros(); toast('Usuario quitado'); }
+  catch(e){ toast((e && e.message) || 'No se pudo quitar'); }
+}
 function crearPgDb(token){
   const j=async(url,opt)=>{
     const r=await fetch(url,Object.assign({headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}},opt));
@@ -1615,9 +1775,20 @@ async function iniciarNube(){
   if(!db){ Cloud.cargando=false; nubeEstado('local','Se guarda solo en este dispositivo'); return; }
   Cloud.db=db;
   if(Cloud.tipo==='supabase' && !db.tieneSesion()){ Cloud.cargando=false; nubeEstado('login','Inicia sesión para conectar con Supabase'); abrirLogin(); return; }
+  if(Cloud.tipo==='supabase'){
+    let ok=false;
+    try{ ok=await elegirNegocio(db); }
+    catch(e){
+      Cloud.cargando=false;
+      if(e && e.code==='revoked'){ nubeEstado('login','Vuelve a iniciar sesión'); abrirLogin(); return; }
+      nubeEstado('offline','Sin conexión: puedes seguir vendiendo, se sincronizará solo'); programarReintento(); return;
+    }
+    if(!ok){ Cloud.cargando=false; return; }
+  }
   try{
     const meta=await db.doc('meta/estado').get();
     if(meta.exists){ await cargarDeNube(db); Cloud.listo=true; Cloud.backoff=0; Cloud.ultima=new Date(); recordarBackend(); nubeEstado('ok'); refrescarTodo(); nubeProgramar(); }
+    else if(Cloud.autoSubir){ Cloud.autoSubir=false; Cloud.cargando=false; await subirANube(); }
     else { nubeEstado('vacia','La nube está vacía: falta subir los datos de este dispositivo'); }
   }catch(e){
     Cloud.listo=false;
@@ -1636,7 +1807,7 @@ async function subirANube(){
   try{
     const meta=await Cloud.db.doc('meta/estado').get();
     if(meta.exists){ await cargarDeNube(Cloud.db); Cloud.listo=true; nubeEstado('ok'); refrescarTodo(); toast('Ya había datos en la nube: se cargaron'); return; }
-    try{ localStorage.setItem('abarrotesDB_pre_nube', JSON.stringify(DB)); }catch(e){}
+    try{ localStorage.setItem(lsK('abarrotesDB_pre_nube'), JSON.stringify(DB)); }catch(e){}
     Cloud.snap={}; Cloud.malos=new Set(); Cloud.listo=true;
     await nubeSync();
     if(Cloud.estado!=='ok'){ Cloud.listo=false; return; }
@@ -1663,8 +1834,17 @@ function renderDatos(){
   if(Cloud.estado==='vacia') h+='<button class="btn-big" style="margin:12px 0 0;" onclick="subirANube()">☁️ Subir los datos de este dispositivo</button><div class="lr-sub">Hazlo desde el dispositivo que tiene tus datos reales.</div>';
   if(Cloud.pendientes) h+='<div class="lr-sub" style="margin-top:6px;font-weight:700;">Cambios pendientes de enviar: '+Cloud.pendientes+'</div>';
   h+='<div class="lr-sub" style="margin-top:10px;">Por ahora usa la app en un solo dispositivo a la vez.</div>';
-  if(Cloud.tipo==='supabase' && Cloud.db && Cloud.db.tieneSesion && Cloud.db.tieneSesion()) h+='<button class="btn-wide" style="margin-top:10px;" onclick="cerrarSesion()">Cerrar sesión</button>';
-  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 1.0 (13/11/2026)</div>';
+  if(Cloud.tipo==='supabase' && Cloud.negocioInfo){
+    const nn=Cloud.negocioInfo;
+    h+='<div class="lr-sub" style="margin-top:8px;"><b>'+escapeHtml(nn.nombre)+'</b> · '+(ROLES[nn.rol]||nn.rol)+'</div>';
+    if(Cloud.soloLectura) h+='<div class="lr-sub" style="color:var(--rojo);font-weight:700;">Prueba terminada o negocio suspendido: solo lectura.</div>';
+    else if(nn.estado==='prueba' && nn.vence) h+='<div class="lr-sub">Prueba gratuita hasta el '+new Date(nn.vence).toLocaleDateString('es-GT')+'</div>';
+    h+='<button class="btn-wide" style="margin-top:10px;" onclick="abrirNegocios()">🏪 Cambiar de negocio o crear otro</button>';
+    h+='<button class="btn-wide solo-dueno" style="margin-top:8px;" onclick="abrirUsuarios()">👥 Usuarios y accesos</button>';
+  }
+  if(Cloud.tipo==='supabase' && Cloud.db && Cloud.db.tieneSesion && Cloud.db.tieneSesion()) h+='<button class="btn-wide" style="margin-top:8px;" onclick="cerrarSesion()">Cerrar sesión</button>';
+  h+=bloqueInstalar();
+  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 2.0 multinegocio (16/11/2026)</div>';
   el.innerHTML=h;
 }
 async function respaldoDescargar(){
@@ -1692,7 +1872,7 @@ function respaldoLeer(inp){
 }
 function respaldoAplicar(){
   if(!respaldoPend) return;
-  try{ localStorage.setItem('abarrotesDB_pre_restauracion', JSON.stringify(DB)); }catch(e){}
+  try{ localStorage.setItem(lsK('abarrotesDB_pre_restauracion'), JSON.stringify(DB)); }catch(e){}
   DB=respaldoPend; respaldoPend=null; document.getElementById('btnRestConf').style.display='none';
   normalizarDB(); guardar(); refrescarTodo(); toast('Respaldo restaurado');
 }
@@ -1732,10 +1912,22 @@ document.getElementById('scanCant').addEventListener('keydown',e=>{
 
 renderProdGrid();
 enfocarEscaner();
+var instalarEvt=null;
+window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); instalarEvt=e; renderDatos(); });
+window.addEventListener('appinstalled',()=>{ instalarEvt=null; toast('PosFlow instalada'); renderDatos(); });
+function esApp(){ return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true; }
+async function instalarApp(){ if(!instalarEvt) return; instalarEvt.prompt(); try{ await instalarEvt.userChoice; }catch(e){} instalarEvt=null; renderDatos(); }
+function bloqueInstalar(){
+  if(!window.__swOk) return '';
+  if(esApp()) return '<div class="lr-sub" style="margin-top:10px;">✅ Instalada como app</div>';
+  if(instalarEvt) return '<button class="btn-big" style="margin:12px 0 0;" onclick="instalarApp()">📲 Instalar PosFlow como app</button>';
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  return '<div class="lr-sub" style="margin-top:10px;">'+(ios?'Para instalar: toca Compartir (⬆️) y elige “Agregar a pantalla de inicio”.':'Para instalar: abre el menú del navegador (⋮) y elige “Instalar app” o “Agregar a pantalla de inicio”.')+'</div>';
+}
 window.addEventListener('offline',()=>{ toast('Sin conexión: sigues vendiendo, se sincronizará solo'); if(Cloud.listo) nubeProgramar(); });
 window.addEventListener('online',()=>{ toast('Conexión restablecida: sincronizando...'); Cloud.backoff=0; clearTimeout(Cloud.retry); if(!Cloud.cargando) reconectar(); });
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && (Cloud.estado==='offline'||Cloud.estado==='error')) reconectar(); });
-try{ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){}
+try{ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').then(()=>{ window.__swOk=true; }).catch(()=>{}); }catch(e){}
 iniciarNube();
 </script>
 </body>
