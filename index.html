@@ -648,7 +648,7 @@ function cobrar(){
     p.stock -= c.cant;
     return {prodId:p.id, nombre:p.nombre, precio:p.precio, costo:(p.costo!=null?p.costo:null), cant:c.cant};
   });
-  const venta = {id:uid(), num:DB.ventas.reduce((m,x)=>Math.max(m,x.num||0),0)+1, bodegaId:DB.config.bodega, fecha:Date.now(), items, total, tipo:pagoTipo, clienteId: document.getElementById('selCliente').value || null};
+  const venta = {id:uid(), num:sigNumVenta(serieVenta()), serie:serieVenta(), bodegaId:DB.config.bodega, fecha:Date.now(), items, total, tipo:pagoTipo, clienteId: document.getElementById('selCliente').value || null};
   DB.ventas.push(venta);
   if(pagoTipo==='credito'){
     const cli = DB.clientes.find(c=>c.id===venta.clienteId);
@@ -825,7 +825,7 @@ function renderRep(){
   rv.innerHTML = ventasHoy.length ? ventasHoy.slice().reverse().map(v=>{
     const fd0=new Date(v.fecha); const h=(multi?fd0.toLocaleDateString('es-GT',{day:'2-digit',month:'2-digit'})+' ':'')+fd0.toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'});
     const cl=v.clienteId?(DB.clientes.find(x=>x.id===v.clienteId)||{}).nombre||'Cliente':'C/F';
-    return `<div class="list-row" onclick="verTicket('${v.id}')"><div><div class="lr-main">Ticket #${v.num||'-'} · ${fmtQ(v.total)}</div><div class="lr-sub">${h} · ${escapeHtml(cl)} · ${v.tipo==='credito'?'Crédito':'Contado'}</div></div><span class="badge zero">🖨️</span></div>`;
+    return `<div class="list-row" onclick="verTicket('${v.id}')"><div><div class="lr-main">Ticket ${tk(v)} · ${fmtQ(v.total)}</div><div class="lr-sub">${h} · ${escapeHtml(cl)} · ${v.tipo==='credito'?'Crédito':'Contado'}</div></div><span class="badge zero">🖨️</span></div>`;
   }).join('') : '<div class="empty">No hay ventas en este período.</div>';
   const wrap=document.getElementById('repProd');
   const arr=Object.entries(porProd).sort((a,b)=>b[1]-a[1]);
@@ -1026,7 +1026,7 @@ function htmlTicket(v){
   if(c.nit) h+='<div class="c">NIT: '+escapeHtml(c.nit)+'</div>';
   if(c.direccion) h+='<div class="c">'+escapeHtml(c.direccion)+'</div>';
   if(c.tel) h+='<div class="c">Tel: '+escapeHtml(c.tel)+'</div>';
-  h+='<hr><div class="r"><span>Ticket #'+(v.num||'-')+'</span><span>'+fh+'</span></div>';
+  h+='<hr><div class="r"><span>Ticket '+tk(v)+'</span><span>'+fh+'</span></div>';
   h+='<div>Cliente: '+(cli?escapeHtml(cli.nombre):'C/F Consumidor final')+'</div>';
   h+='<div>Pago: '+(v.tipo==='credito'?'Crédito':'Contado')+'</div><hr>';
   v.items.forEach(it=>{ h+='<div class="r"><span class="n">'+it.cant+' x '+escapeHtml(it.nombre)+'</span><span>'+fmtQ(it.precio*it.cant)+'</span></div>'; });
@@ -1037,7 +1037,7 @@ function htmlTicket(v){
 }
 function mostrarTicket(v,nuevo){
   ticketActual=v;
-  document.getElementById('ticketTitulo').textContent = nuevo ? 'Venta registrada' : 'Ticket #'+(v.num||'-');
+  document.getElementById('ticketTitulo').textContent = nuevo ? 'Venta registrada' : 'Ticket '+tk(v);
   document.getElementById('ticketPrev').innerHTML=htmlTicket(v);
   abrirModal('ovTicket');
   if(nuevo && DB.config.auto) imprimirTicket();
@@ -1417,7 +1417,7 @@ function imprimirRepInv(){
 
 // ---------- base de datos en la nube (db) + copia local ----------
 const COLS=['productos','clientes','bodegas','ventas','pagos','ingresos','salidas'];
-var Cloud={tipo:null, db:null, listo:false, snap:{}, malos:new Set(), estado:'local', msg:'', ultima:null, timer:null, retry:null, corriendo:false, otra:false, cargando:false};
+var Cloud={tipo:null, db:null, listo:false, snap:{}, base:{}, malos:new Set(), estado:'local', msg:'', ultima:null, timer:null, retry:null, corriendo:false, otra:false, cargando:false};
 const ID_OK=/^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 function nubeEstado(e,msg){
   Cloud.estado=e; Cloud.msg=msg||'';
@@ -1428,13 +1428,122 @@ function nubeEstado(e,msg){
 function docsDeseados(){
   const m={};
   COLS.forEach(c=>(DB[c]||[]).forEach(d=>{ if(d && d.id!=null && ID_OK.test(String(d.id)) && String(d.id)!=='.' && String(d.id)!=='..') m[c+'/'+d.id]=d; }));
-  m['config/main']=Object.assign({id:'main'},DB.config);
+  const cfgDoc=Object.assign({id:'main'},DB.config); delete cfgDoc.bodega;   // la bodega en uso es de cada equipo
+  m['config/main']=cfgDoc;
   return m;
 }
 function nubeProgramar(){
   if(typeof Cloud==='undefined' || !Cloud.listo) return;
   clearTimeout(Cloud.timer); Cloud.timer=setTimeout(nubeSync,700);
 }
+var Poll={t:null, cursor:null, activo:false, corriendo:false, ms:4000};
+function canon(v){
+  if(v===null || typeof v!=='object'){ const j=JSON.stringify(v); return j===undefined ? 'null' : j; }
+  if(Array.isArray(v)) return '['+v.map(canon).join(',')+']';
+  return '{'+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}';
+}
+function esContador(col){ return col==='productos' || col==='clientes'; }
+function clonar(o){ return JSON.parse(JSON.stringify(o)); }
+// Cambios locales de un producto o cliente expresados como sumas/restas (existencias y saldos) y campos modificados
+function opMod(col,loc,base){
+  const inc=[], set={}, del=[], cont=col==='productos'?'stocks':'saldo';
+  if(col==='productos'){
+    const ls=loc.stocks||{}, bs=base.stocks||{};
+    Object.keys(Object.assign({},ls,bs)).forEach(b=>{ const d=(ls[b]||0)-(bs[b]||0); if(d) inc.push({p:['stocks',b],d}); });
+  } else { const d=(loc.saldo||0)-(base.saldo||0); if(d) inc.push({p:['saldo'],d}); }
+  Object.keys(loc).forEach(f=>{ if(f!==cont && canon(loc[f])!==canon(base[f])) set[f]=loc[f]; });
+  Object.keys(base).forEach(f=>{ if(f!==cont && !(f in loc)) del.push(f); });
+  return {inc,set,del};
+}
+// Fusiona lo que cambió aquí (local - base) sobre la versión más reciente de la nube
+function fusionar(col,base,loc,rem){
+  if(!base) return loc;
+  const cont=col==='productos'?'stocks':'saldo', out=clonar(rem);
+  if(col==='productos'){
+    out.stocks=out.stocks||{}; const ls=loc.stocks||{}, bs=base.stocks||{};
+    Object.keys(Object.assign({},ls,bs)).forEach(b=>{ const d=(ls[b]||0)-(bs[b]||0); if(d) out.stocks[b]=(out.stocks[b]||0)+d; });
+  } else { out.saldo=(out.saldo||0)+((loc.saldo||0)-(base.saldo||0)); }
+  Object.keys(loc).forEach(f=>{ if(f!==cont && canon(loc[f])!==canon(base[f])) out[f]=loc[f]; });
+  return out;
+}
+function localDe(col,id){
+  if(col==='config'){ const c=Object.assign({id:'main'},DB.config); delete c.bodega; return c; }
+  return DB[col].find(x=>x.id===id);
+}
+function ponerLocal(col,id,obj){
+  if(col==='config'){ const c=clonar(obj); delete c.id; c.bodega=DB.config.bodega; DB.config=Object.assign({},CFG_DEF,c); return; }
+  const o=clonar(obj); if(col==='productos') vincular(o);
+  const i=DB[col].findIndex(x=>x.id===id); if(i>=0) DB[col][i]=o; else DB[col].push(o);
+}
+function aplicarRemotos(r){
+  let n=0;
+  (r.docs||[]).forEach(d=>{
+    const col=d.k.split('/')[0], id=d.k.slice(col.length+1);
+    if(col!=='config' && !Array.isArray(DB[col])) return;
+    const hr=hashStr(canon(d.data));
+    if(Cloud.snap[d.k]===hr) return;                                   // ya lo teníamos
+    const loc=localDe(col,id), enSnap=(d.k in Cloud.snap);
+    if(!loc && enSnap){ Cloud.snap[d.k]=hr; if(esContador(col)) Cloud.base[d.k]=clonar(d.data); return; }   // lo borramos aquí y falta enviarlo
+    const sucio=loc ? hashStr(canon(loc))!==Cloud.snap[d.k] : false;   // hay cambios nuestros sin enviar
+    let nuevo=d.data;
+    if(loc && sucio) nuevo=(Cloud.db.soportaMod && esContador(col)) ? fusionar(col,Cloud.base[d.k],loc,d.data) : loc;
+    Cloud.snap[d.k]=hr; if(esContador(col)) Cloud.base[d.k]=clonar(d.data);
+    ponerLocal(col,id,nuevo); n++;
+  });
+  (r.borrados||[]).forEach(b=>{
+    const col=b.k.split('/')[0], id=b.k.slice(col.length+1);
+    if(!Array.isArray(DB[col])) return;
+    const loc=localDe(col,id);
+    if(!loc){ delete Cloud.snap[b.k]; delete Cloud.base[b.k]; return; }
+    if(hashStr(canon(loc))!==Cloud.snap[b.k]) return;                  // lo modificamos aquí: se vuelve a enviar
+    const i=DB[col].findIndex(x=>x.id===id); if(i>=0){ DB[col].splice(i,1); n++; }
+    delete Cloud.snap[b.k]; delete Cloud.base[b.k];
+  });
+  return n;
+}
+function persistirTodo(){ try{ localStorage.setItem(lsK('abarrotesDB'),JSON.stringify(DB)); }catch(e){} persistirSnap(); }
+function refrescarSuave(){
+  aplicarConfig(); renderProdGrid(); renderCart();
+  const v=document.querySelector('.view.active'), id=v?v.id:'';
+  if(id==='view-inv') renderInv(); else if(id==='view-cli') renderCli(); else if(id==='view-rep') renderRep();
+  if(document.getElementById('ovDatos').classList.contains('open')) renderDatos();
+}
+function iniciarSondeo(){ if(!Cloud.db || !Cloud.db.cambios) return; Poll.activo=true; proximoSondeo(1200); }
+function pararSondeo(){ Poll.activo=false; clearTimeout(Poll.t); }
+function proximoSondeo(ms){
+  if(!Poll.activo) return; clearTimeout(Poll.t);
+  const oculto=(typeof document!=='undefined' && document.visibilityState==='hidden');
+  Poll.t=setTimeout(sondear, ms!=null ? ms : (oculto ? Poll.ms*5 : Poll.ms));
+}
+async function sondear(){
+  if(!Poll.activo) return;
+  if(!Cloud.listo || !Cloud.db || !Cloud.db.cambios || Cloud.corriendo || Poll.corriendo || (typeof navigator!=='undefined' && navigator.onLine===false)){ proximoSondeo(); return; }
+  Poll.corriendo=true;
+  try{
+    if(!Poll.cursor){ const r0=await Cloud.db.cambios(null); Poll.cursor=r0.ahora; }
+    else {
+      let desde=new Date(Date.parse(Poll.cursor)-15000).toISOString(), primero=null, vueltas=0, cambios=0;
+      for(;;){
+        const r=await Cloud.db.cambios(desde); if(primero===null) primero=r.ahora;
+        cambios+=aplicarRemotos(r);
+        if(!r.mas || !r.docs.length || ++vueltas>50) break;
+        const ult=r.docs[r.docs.length-1].t;
+        desde=(ult===desde) ? new Date(Date.parse(ult)+1).toISOString() : ult;   // evita quedarse en la misma página
+      }
+      Poll.cursor=primero;
+      if(cambios){ Cloud.ultimaRemota=new Date(); persistirTodo(); refrescarSuave(); }
+    }
+  }catch(e){
+    if(e && e.code==='revoked'){ pararSondeo(); Poll.corriendo=false; nubeEstado('login','Vuelve a iniciar sesión'); abrirLogin(); return; }
+  }
+  Poll.corriendo=false; proximoSondeo();
+}
+function equipoSerie(){
+  try{ let c=localStorage.getItem('posflowEquipo'); if(!c){ c=Math.random().toString(36).slice(2,5).toUpperCase().padEnd(3,'X'); localStorage.setItem('posflowEquipo',c); } return c; }catch(e){ return 'XXX'; }
+}
+function serieVenta(){ return Cloud.tipo==='supabase' ? equipoSerie() : ''; }
+function sigNumVenta(serie){ return DB.ventas.reduce((m,x)=>((x.serie||'')===serie ? Math.max(m,x.num||0) : m),0)+1; }
+function tk(v){ return v.serie ? v.serie+'-'+String(v.num||0).padStart(4,'0') : '#'+(v.num||'-'); }
 function puedeEscribirClave(k){
   if(Cloud.tipo!=='supabase') return true;
   if(Cloud.soloLectura || Cloud.rol==='lectura') return false;
@@ -1448,8 +1557,9 @@ function hashStr(str){
   h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
   return 4294967296*(2097151&h2)+(h1>>>0);
 }
-function persistirSnap(){ try{ localStorage.setItem(lsK('posflowSnap'),JSON.stringify({tipo:Cloud.tipo,h:Cloud.snap})); }catch(e){} }
+function persistirSnap(){ try{ localStorage.setItem(lsK('posflowSnap'),JSON.stringify({tipo:Cloud.tipo,h:Cloud.snap,b:Cloud.base})); }catch(e){} }
 function snapGuardado(){ try{ const j=JSON.parse(localStorage.getItem(lsK('posflowSnap'))||'null'); return (j && j.tipo===Cloud.tipo && j.h) ? j.h : null; }catch(e){ return null; } }
+function baseGuardada(){ try{ const j=JSON.parse(localStorage.getItem(lsK('posflowSnap'))||'null'); return (j && j.tipo===Cloud.tipo && j.b) ? j.b : null; }catch(e){ return null; } }
 function recordarBackend(){ try{ if(Cloud.tipo==='pg'||Cloud.tipo==='supabase') localStorage.setItem('posflowBackend',Cloud.tipo); }catch(e){} }
 function programarReintento(){
   clearTimeout(Cloud.retry); Cloud.backoff=Math.min((Cloud.backoff||0)*2||5000,60000);
@@ -1463,14 +1573,20 @@ async function nubeSync(){
   let cambioSnap=false;
   try{
     const des=docsDeseados(), ops=[];
-    for(const k in des){ if(Cloud.malos.has(k) || !puedeEscribirClave(k)) continue; const t=JSON.stringify(des[k]), h=hashStr(t); if(Cloud.snap[k]!==h) ops.push({k,t,h,tipo:'set'}); }
+    for(const k in des){
+      if(Cloud.malos.has(k) || !puedeEscribirClave(k)) continue;
+      const h=hashStr(canon(des[k])); if(Cloud.snap[k]===h) continue;
+      const t=JSON.stringify(des[k]), col=k.split('/')[0];
+      if(Cloud.db.soportaMod && esContador(col) && Cloud.base[k] && (k in Cloud.snap)) ops.push({k,t,h,tipo:'mod',m:opMod(col,des[k],Cloud.base[k])});
+      else ops.push({k,t,h,tipo:'set'});
+    }
     for(const k in Cloud.snap){ if(!(k in des) && puedeEscribirClave(k)) ops.push({k,tipo:'del'}); }
     Cloud.pendientes=ops.length;
     if(!ops.length){ if(Cloud.estado!=='cuota' && Cloud.malos.size===0){ Cloud.backoff=0; if(!Cloud.ultima) Cloud.ultima=new Date(); nubeEstado('ok'); } return; }
     if(typeof navigator!=='undefined' && navigator.onLine===false){ nubeEstado('offline','Sin conexión: '+ops.length+' cambio(s) pendientes, se enviarán solos'); return; }
     nubeEstado('sync','Guardando '+ops.length+' cambio(s)...');
     let fallo=null, hechos=0, i=0;
-    const hecho=op=>{ if(op.tipo==='set') Cloud.snap[op.k]=op.h; else delete Cloud.snap[op.k]; cambioSnap=true; };
+    const hecho=op=>{ if(op.tipo==='del'){ delete Cloud.snap[op.k]; delete Cloud.base[op.k]; } else { Cloud.snap[op.k]=op.h; if(esContador(op.k.split('/')[0])) Cloud.base[op.k]=JSON.parse(op.t); } cambioSnap=true; };
     const worker=async()=>{
       while(i<ops.length && !fallo){
         const op=ops[i++];
@@ -1485,7 +1601,7 @@ async function nubeSync(){
       for(let k=0;k<ops.length && !fallo;k+=100){
         const parte=ops.slice(k,k+100);
         try{
-          await Cloud.db.lote(parte.map(o=>o.tipo==='set'?{tipo:'set',k:o.k,data:JSON.parse(o.t)}:{tipo:'del',k:o.k}));
+          await Cloud.db.lote(parte.map(o=>o.tipo==='set'?{tipo:'set',k:o.k,data:JSON.parse(o.t)}:(o.tipo==='mod'?Object.assign({tipo:'mod',k:o.k},o.m):{tipo:'del',k:o.k})));
           parte.forEach(hecho); hechos+=parte.length; if(ops.length>20) nubeEstado('sync','Guardando '+hechos+' de '+ops.length+'...');
         }catch(e){ if(e && (e.code==='invalid_argument'||e.code==='forbidden')) parte.forEach(o=>Cloud.malos.add(o.k)); else fallo=e||{code:'unavailable'}; }
       }
@@ -1495,7 +1611,7 @@ async function nubeSync(){
     else if(fallo && fallo.code==='revoked'){ nubeEstado('login','Sin permiso: inicia sesión de nuevo o revisa tu usuario'); }
     else if(fallo){ Cloud.pendientes=ops.length-hechos; nubeEstado('offline','Sin conexión: '+Cloud.pendientes+' cambio(s) pendientes, se enviarán solos'); programarReintento(); }
     else if(Cloud.malos.size){ nubeEstado('error',Cloud.malos.size+' registro(s) no se pudieron guardar (revisa tus permisos o el tamaño)'); }
-    else { Cloud.pendientes=0; Cloud.backoff=0; Cloud.ultima=new Date(); nubeEstado('ok'); }
+    else { Cloud.pendientes=0; Cloud.backoff=0; Cloud.ultima=new Date(); nubeEstado('ok'); if(Poll.activo) proximoSondeo(500); }
   } finally { if(cambioSnap) persistirSnap(); Cloud.corriendo=false; if(Cloud.otra) nubeProgramar(); }
 }
 async function leerColeccion(db,nombre){
@@ -1525,22 +1641,24 @@ function refrescarTodo(){
 }
 async function cargarDeNube(db){
   nubeEstado('cargando','Cargando datos...');
+  if(db.cambios){ try{ const r0=await db.cambios(null); Poll.cursor=r0.ahora; }catch(e){ db.cambios=null; db.soportaMod=false; } }
   if(localStorage.getItem(lsK('abarrotesDB_pre_nube'))===null){ try{ localStorage.setItem(lsK('abarrotesDB_pre_nube'), JSON.stringify(DB)); }catch(e){} }
   const nube={};
   for(const c of COLS) (await leerColeccion(db,c)).forEach(d=>{ nube[c+'/'+d.id]=d; });
   const cfg=await db.doc('config/main').get(); if(cfg.exists) nube['config/main']=JSON.parse(JSON.stringify(cfg.data()));
-  const H=snapGuardado(), local=docsDeseados(), res={}; Cloud.snap={};
-  const hl=k=>hashStr(JSON.stringify(local[k]));
+  const H=snapGuardado(), B0=baseGuardada()||{}, local=docsDeseados(), res={}; Cloud.snap={}; Cloud.base={};
+  const hl=k=>hashStr(canon(local[k]));
   Object.keys(nube).forEach(k=>{
-    Cloud.snap[k]=hashStr(JSON.stringify(nube[k]));
+    Cloud.snap[k]=hashStr(canon(nube[k])); if(esContador(k.split('/')[0])) Cloud.base[k]=clonar(nube[k]);
     if(!H){ res[k]=nube[k]; return; }                       // dispositivo sin historial: manda la nube
     if(!(k in local)){ if(!(k in H) || !puedeEscribirClave(k)) res[k]=nube[k]; return; } // borrado aquí sin conexión: se borrará en la nube
-    res[k]=(puedeEscribirClave(k) && hl(k)!==H[k]) ? local[k] : nube[k];              // modificado aquí sin conexión: se conserva y se envía
+    if(puedeEscribirClave(k) && hl(k)!==H[k]){ const col=k.split('/')[0]; res[k]=(db.soportaMod && esContador(col)) ? fusionar(col,B0[k],local[k],nube[k]) : local[k]; }
+    else res[k]=nube[k];              // modificado aquí sin conexión: se conserva y se envía
   });
   if(H) Object.keys(local).forEach(k=>{ if(!(k in nube) && puedeEscribirClave(k) && (!(k in H) || hl(k)!==H[k])) res[k]=local[k]; }); // nuevos aquí
   const nuevo={}; COLS.forEach(c=>{ nuevo[c]=[]; });
   Object.keys(res).forEach(k=>{ const c=k.split('/')[0]; if(nuevo[c]) nuevo[c].push(res[k]); });
-  nuevo.config=Object.assign({}, res['config/main']||DB.config); delete nuevo.config.id;
+  nuevo.config=Object.assign({}, res['config/main']||DB.config); delete nuevo.config.id; nuevo.config.bodega=DB.config.bodega;
   DB=nuevo; normalizarDB();
   try{ localStorage.setItem(lsK('abarrotesDB'), JSON.stringify(DB)); }catch(e){}
   persistirSnap(); Cloud.malos=new Set();
@@ -1576,6 +1694,8 @@ function crearSupabaseDb(url,key){
     entrar:(email,password)=>auth({email,password},'password'),
     salir:()=>setSes(null),
     setNegocio:id=>{ neg=id; },
+    soportaMod:true,
+    cambios:desde=>rest('rpc/pf_cambios',{method:'POST',body:JSON.stringify({p_negocio:neg,p_desde:desde})}),
     async registrar(email,password){
       const {r,j}=await post('/auth/v1/signup',{email,password});
       if(!r.ok) throw {code:'invalid_argument', message:/already|registered/i.test(msg(j))?'Ese correo ya tiene cuenta: inicia sesión':(msg(j)||'No se pudo crear la cuenta')};
@@ -1647,7 +1767,7 @@ function cambiarEspacioLocal(id){
   LS_NEG=id; try{ localStorage.setItem('posflowNegocio',id); }catch(e){}
   let d=null; try{ d=JSON.parse(localStorage.getItem(lsK('abarrotesDB'))||'null'); }catch(e){}
   DB=d||{productos:[],clientes:[],ventas:[],pagos:[]};
-  normalizarDB(); cart=[]; Cloud.snap={}; Cloud.malos=new Set(); Cloud.listo=false; Cloud.pendientes=0;
+  normalizarDB(); cart=[]; Cloud.snap={}; Cloud.base={}; Cloud.malos=new Set(); Cloud.listo=false; Cloud.pendientes=0; pararSondeo(); Poll.cursor=null;
 }
 function activarNegocio(n){
   Cloud.db.setNegocio(n.id); Cloud.negocio=n.id; Cloud.negocioInfo=n; Cloud.rol=n.rol;
@@ -1787,7 +1907,7 @@ async function iniciarNube(){
   }
   try{
     const meta=await db.doc('meta/estado').get();
-    if(meta.exists){ await cargarDeNube(db); Cloud.listo=true; Cloud.backoff=0; Cloud.ultima=new Date(); recordarBackend(); nubeEstado('ok'); refrescarTodo(); nubeProgramar(); }
+    if(meta.exists){ await cargarDeNube(db); Cloud.listo=true; Cloud.backoff=0; Cloud.ultima=new Date(); recordarBackend(); nubeEstado('ok'); refrescarTodo(); nubeProgramar(); iniciarSondeo(); }
     else if(Cloud.autoSubir){ Cloud.autoSubir=false; Cloud.cargando=false; await subirANube(); }
     else { nubeEstado('vacia','La nube está vacía: falta subir los datos de este dispositivo'); }
   }catch(e){
@@ -1808,11 +1928,12 @@ async function subirANube(){
     const meta=await Cloud.db.doc('meta/estado').get();
     if(meta.exists){ await cargarDeNube(Cloud.db); Cloud.listo=true; nubeEstado('ok'); refrescarTodo(); toast('Ya había datos en la nube: se cargaron'); return; }
     try{ localStorage.setItem(lsK('abarrotesDB_pre_nube'), JSON.stringify(DB)); }catch(e){}
-    Cloud.snap={}; Cloud.malos=new Set(); Cloud.listo=true;
+    if(Cloud.db.cambios){ try{ const r0=await Cloud.db.cambios(null); Poll.cursor=r0.ahora; }catch(e){ Cloud.db.cambios=null; Cloud.db.soportaMod=false; } }
+    Cloud.snap={}; Cloud.base={}; Cloud.malos=new Set(); Cloud.listo=true;
     await nubeSync();
     if(Cloud.estado!=='ok'){ Cloud.listo=false; return; }
     await Cloud.db.doc('meta/estado').set({migrado:true, version:1, fecha:Date.now(), docs:Object.keys(docsDeseados()).length});
-    recordarBackend(); toast('Datos subidos a la nube');
+    recordarBackend(); iniciarSondeo(); toast('Datos subidos a la nube');
   }catch(e){ Cloud.listo=false; nubeEstado('error','No se pudo subir los datos'); }
 }
 function nubeSincronizarYa(){
@@ -1832,6 +1953,7 @@ function renderDatos(){
   h+='<div class="lr-sub" style="margin-top:8px;">Documentos: '+n+(Cloud.tipo==='claude'?' de 25,000':'')+' · Última sincronización: '+(Cloud.ultima?fmtFH(Cloud.ultima):'—')+'</div>';
   if(n>20000 && Cloud.tipo==='claude') h+='<div class="lr-sub" style="color:var(--rojo);font-weight:700;">Cerca del límite de la base de datos: hay que archivar ventas antiguas.</div>';
   if(Cloud.estado==='vacia') h+='<button class="btn-big" style="margin:12px 0 0;" onclick="subirANube()">☁️ Subir los datos de este dispositivo</button><div class="lr-sub">Hazlo desde el dispositivo que tiene tus datos reales.</div>';
+  if(Poll.activo) h+='<div class="lr-sub" style="margin-top:6px;">🔄 Sincronización en vivo activa'+(Cloud.ultimaRemota?' · último cambio de otro equipo: '+fmtFH(Cloud.ultimaRemota):'')+'</div>';
   if(Cloud.pendientes) h+='<div class="lr-sub" style="margin-top:6px;font-weight:700;">Cambios pendientes de enviar: '+Cloud.pendientes+'</div>';
   h+='<div class="lr-sub" style="margin-top:10px;">Por ahora usa la app en un solo dispositivo a la vez.</div>';
   if(Cloud.tipo==='supabase' && Cloud.negocioInfo){
@@ -1844,7 +1966,7 @@ function renderDatos(){
   }
   if(Cloud.tipo==='supabase' && Cloud.db && Cloud.db.tieneSesion && Cloud.db.tieneSesion()) h+='<button class="btn-wide" style="margin-top:8px;" onclick="cerrarSesion()">Cerrar sesión</button>';
   h+=bloqueInstalar();
-  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 2.0 multinegocio (16/11/2026)</div>';
+  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 2.1 en vivo (16/11/2026)</div>';
   el.innerHTML=h;
 }
 async function respaldoDescargar(){
@@ -1926,7 +2048,7 @@ function bloqueInstalar(){
 }
 window.addEventListener('offline',()=>{ toast('Sin conexión: sigues vendiendo, se sincronizará solo'); if(Cloud.listo) nubeProgramar(); });
 window.addEventListener('online',()=>{ toast('Conexión restablecida: sincronizando...'); Cloud.backoff=0; clearTimeout(Cloud.retry); if(!Cloud.cargando) reconectar(); });
-document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && (Cloud.estado==='offline'||Cloud.estado==='error')) reconectar(); });
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState!=='visible') return; if(Cloud.estado==='offline'||Cloud.estado==='error') reconectar(); if(Poll.activo) proximoSondeo(300); });
 try{ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').then(()=>{ window.__swOk=true; }).catch(()=>{}); }catch(e){}
 iniciarNube();
 </script>
