@@ -135,7 +135,9 @@ select{width:100%; padding:12px; border-radius:10px; border:1px solid var(--bord
 .ticket hr{border:0;border-top:1px dashed #000;margin:6px 0}
 .ticket img{max-width:100%;display:block;margin:0 auto 4px}
 body.rol-cajero .solo-dueno,body.rol-lectura .solo-dueno{display:none!important}
-body.rol-lectura .no-lectura{display:none!important}
+body.rol-lectura .no-lectura,body.sin-plan .no-lectura{display:none!important}
+.banner-plan{background:var(--naranja);color:#fff;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+.banner-plan.rojo{background:var(--rojo)}
 .cfg-btn{background:rgba(255,255,255,.15);border:none;border-radius:10px;font-size:22px;width:44px;height:44px;color:#fff;cursor:pointer}
 .btn-big{width:100%;padding:16px;border:none;border-radius:12px;background:var(--verde);color:#fff;font-size:16px;font-weight:700;font-family:inherit;margin-bottom:12px}
 .btn-wide{width:100%;padding:13px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;font-size:15px}
@@ -175,8 +177,9 @@ body.rol-lectura .no-lectura{display:none!important}
 
 <header>
   <div><h1 id="hNombre">🛒 PosFlow</h1><div class="fecha" id="hNegocio" style="margin-top:2px;"></div></div>
-  <div style="display:flex;align-items:center;gap:12px;"><span class="fecha" id="fechaHoy"></span><button class="cfg-btn" id="nubeBtn" onclick="abrirDatos()" aria-label="Datos y respaldo">💾</button><button class="cfg-btn solo-dueno" onclick="abrirCfg()" aria-label="Configuración">⚙️</button></div>
+  <div style="display:flex;align-items:center;gap:12px;"><span class="fecha" id="fechaHoy"></span><button class="cfg-btn" id="nubeBtn" onclick="abrirDatos()" aria-label="Datos y respaldo">💾</button><button class="cfg-btn solo-dueno no-lectura" onclick="abrirCfg()" aria-label="Configuración">⚙️</button></div>
 </header>
+<div id="bannerPlan" class="banner-plan" style="display:none;" onclick="if(Cloud.rol==='dueno') abrirPlan()"></div>
 
 <main>
 
@@ -201,7 +204,7 @@ body.rol-lectura .no-lectura{display:none!important}
 
   <!-- INVENTARIO -->
   <section class="view" id="view-inv">
-    <div class="grid2 solo-dueno" style="margin-bottom:12px;">
+    <div class="grid2 solo-dueno no-lectura" style="margin-bottom:12px;">
       <button class="btn-big" style="margin-bottom:0;" onclick="abrirIngreso()">📥 Ingreso a bodega</button>
       <button class="btn-big" style="margin-bottom:0;background:var(--naranja);" onclick="abrirSalida()">📤 Salida de inventario</button>
     </div>
@@ -406,6 +409,25 @@ body.rol-lectura .no-lectura{display:none!important}
     <div id="usrCodigo" style="font-size:28px;font-weight:800;letter-spacing:4px;text-align:center;margin:12px 0;"></div>
     <div class="lr-sub">El código sirve una sola vez y vence en 7 días. La persona crea su cuenta en PosFlow y elige “Unirme a un negocio con código”.</div>
     <div class="modal-actions"><button class="btn-secondary" onclick="cerrarModal('ovUsuarios')">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal suscripción -->
+<div class="overlay" id="ovPlan">
+  <div class="modal">
+    <h3>💳 Mi suscripción</h3>
+    <div class="card" id="planEstado"></div>
+    <h2 class="section-title">Elige un plan</h2>
+    <div class="card" style="padding:0;" id="planLista"></div>
+    <button class="btn-big" id="planTarjetaBtn" style="display:none;margin-top:12px;" onclick="pagarTarjeta()">💳 Pagar con tarjeta</button>
+    <h2 class="section-title">Pagar por depósito o transferencia</h2>
+    <div class="lr-sub" id="planDeposito" style="margin-bottom:10px;"></div>
+    <div class="field"><label>Número de boleta o referencia</label><input id="planRef" autocomplete="off"></div>
+    <div class="field"><label>Nota (opcional)</label><input id="planNota" autocomplete="off"></div>
+    <div class="modal-actions"><button class="btn-secondary" onclick="reportarDeposito()">🏦 Ya pagué: avisar</button></div>
+    <h2 class="section-title">Mis pagos</h2>
+    <div id="planHist"></div>
+    <div class="modal-actions"><button class="btn-secondary" onclick="cerrarModal('ovPlan')">Cerrar</button></div>
   </div>
 </div>
 
@@ -1536,6 +1558,7 @@ async function sondear(){
   }catch(e){
     if(e && e.code==='revoked'){ pararSondeo(); Poll.corriendo=false; nubeEstado('login','Vuelve a iniciar sesión'); abrirLogin(); return; }
   }
+  if(Date.now()-(Poll.infoT||0)>300000){ Poll.infoT=Date.now(); refrescarNegocio(); }
   Poll.corriendo=false; proximoSondeo();
 }
 function equipoSerie(){
@@ -1544,6 +1567,76 @@ function equipoSerie(){
 function serieVenta(){ return Cloud.tipo==='supabase' ? equipoSerie() : ''; }
 function sigNumVenta(serie){ return DB.ventas.reduce((m,x)=>((x.serie||'')===serie ? Math.max(m,x.num||0) : m),0)+1; }
 function tk(v){ return v.serie ? v.serie+'-'+String(v.num||0).padStart(4,'0') : '#'+(v.num||'-'); }
+var Plan={info:null, sel:null, pagos:[], espera:4000}, pagoRetorno=null;
+function calcSoloLectura(n){ return !((n.estado==='activo' || n.estado==='prueba') && (!n.vence || new Date(n.vence).getTime()+3*864e5>Date.now())); }
+function fmtMoneda(c,m){ return ((!m||m==='GTQ')?'Q':m+' ')+(c/100).toFixed(2); }
+function actualizarBanner(){
+  const b=document.getElementById('bannerPlan'); if(!b) return;
+  const n=Cloud.negocioInfo;
+  if(Cloud.tipo!=='supabase' || !n){ b.style.display='none'; return; }
+  const dias=n.vence ? Math.ceil((new Date(n.vence).getTime()-Date.now())/864e5) : null;
+  let txt='', rojo=false;
+  if(n.estado==='suspendido'){ txt='Negocio suspendido: la app está en solo lectura.'; rojo=true; }
+  else if(dias!==null && dias<=0){ txt=Cloud.soloLectura ? 'Suscripción vencida: la app está en solo lectura.' : 'Tu suscripción venció: estás en días de gracia.'; rojo=true; }
+  else if(dias!==null && dias<=7){ txt=(n.estado==='prueba'?'Tu prueba gratuita':'Tu suscripción')+' vence en '+dias+(dias===1?' día.':' días.'); }
+  if(!txt){ b.style.display='none'; return; }
+  b.className='banner-plan'+(rojo?' rojo':''); b.textContent=txt+(n.rol==='dueno'?' Toca para renovar.':' Avisa al dueño del negocio.'); b.style.display='block';
+}
+async function refrescarNegocio(){
+  if(Cloud.tipo!=='supabase' || !Cloud.db || !Cloud.negocio) return;
+  try{
+    const l=await Cloud.db.rpc('pf_mis_negocios'); Cloud.negocios=l;
+    const n=l.find(x=>x.id===Cloud.negocio);
+    if(n){ Cloud.negocioInfo=n; Cloud.rol=n.rol; Cloud.soloLectura=calcSoloLectura(n); aplicarRol(); actualizarBanner(); }
+  }catch(e){}
+}
+async function abrirPlan(){ abrirModal('ovPlan'); document.getElementById('planEstado').innerHTML='<div class="empty">Cargando…</div>'; await cargarPlan(); }
+async function cargarPlan(){
+  try{
+    await refrescarNegocio();
+    Plan.info=await Cloud.db.rpc('pf_info_pago');
+    Plan.pagos=await Cloud.db.rpc('pf_mis_pagos',{p_negocio:Cloud.negocio});
+    if(!Plan.sel && Plan.info.planes.length) Plan.sel=Plan.info.planes[0].id;
+    renderPlan();
+  }catch(e){ document.getElementById('planEstado').innerHTML='<div class="empty">No se pudo cargar (¿sin conexión?)</div>'; }
+}
+function renderPlan(){
+  const n=Cloud.negocioInfo||{}, inf=Plan.info||{planes:[]};
+  const dias=n.vence ? Math.ceil((new Date(n.vence).getTime()-Date.now())/864e5) : null;
+  let h='<div style="font-size:16px;font-weight:700;">'+escapeHtml(n.nombre||'')+'</div>';
+  h+='<div class="lr-sub" style="margin-top:4px;">'+(n.estado==='activo'?'Suscripción activa':(n.estado==='prueba'?'Prueba gratuita':'Suspendido'))+(n.vence?' · vence el '+new Date(n.vence).toLocaleDateString('es-GT')+(dias!==null?' ('+(dias>0?dias+' días':'vencida')+')':''):' · sin vencimiento')+'</div>';
+  if(Cloud.soloLectura) h+='<div class="lr-sub" style="color:var(--rojo);font-weight:700;margin-top:4px;">La app está en solo lectura hasta que renueves.</div>';
+  document.getElementById('planEstado').innerHTML=h;
+  document.getElementById('planLista').innerHTML=inf.planes.map(x=>'<div class="list-row" onclick="elegirPlan(\''+x.id+'\')"><div><div class="lr-main">'+escapeHtml(x.nombre)+'</div><div class="lr-sub">'+x.meses+(x.meses===1?' mes':' meses')+'</div></div><span class="badge '+(Plan.sel===x.id?'ok':'zero')+'">'+fmtMoneda(x.precio_cents,x.moneda)+(Plan.sel===x.id?' ✓':'')+'</span></div>').join('');
+  document.getElementById('planTarjetaBtn').style.display=inf.tarjeta?'block':'none';
+  document.getElementById('planDeposito').innerHTML=escapeHtml(inf.deposito||'').replace(/\n/g,'<br>')+(inf.soporte?'<br><b>Soporte:</b> '+escapeHtml(inf.soporte):'');
+  document.getElementById('planHist').innerHTML=(Plan.pagos||[]).length ? Plan.pagos.map(x=>'<div class="hist-row"><div class="h-top"><span>'+escapeHtml(x.plan)+' · '+(x.metodo==='tarjeta'?'Tarjeta':'Depósito')+'</span><span>'+fmtMoneda(x.monto_cents,x.moneda)+'</span></div><div style="color:var(--sub);">'+new Date(x.creado).toLocaleDateString('es-GT')+' · '+({pendiente:'⏳ Pendiente de confirmar',confirmado:'✅ Confirmado',rechazado:'❌ Rechazado'})[x.estado]+(x.motivo?' ('+escapeHtml(x.motivo)+')':'')+'</div></div>').join('') : '<div class="empty">Aún no hay pagos.</div>';
+}
+function elegirPlan(id){ Plan.sel=id; renderPlan(); }
+async function pagarTarjeta(){
+  if(!Plan.sel){ toast('Elige un plan'); return; }
+  try{ const r=await Cloud.db.funcion('crear-pago',{negocio_id:Cloud.negocio,plan_id:Plan.sel}); if(r && r.url){ location.href=r.url; } else toast('No se pudo crear el cobro'); }
+  catch(e){ toast((e && e.message) || 'No se pudo crear el cobro'); }
+}
+async function reportarDeposito(){
+  const ref=document.getElementById('planRef').value.trim(), nota=document.getElementById('planNota').value.trim();
+  if(!Plan.sel){ toast('Elige un plan'); return; }
+  try{
+    await Cloud.db.rpc('pf_reportar_pago',{p_negocio:Cloud.negocio,p_plan:Plan.sel,p_referencia:ref,p_nota:nota});
+    document.getElementById('planRef').value=''; document.getElementById('planNota').value='';
+    toast('Pago reportado: lo confirmaremos pronto'); await cargarPlan();
+  }catch(e){ toast((e && e.message) || 'No se pudo reportar el pago'); }
+}
+function revisarRetornoPago(){ if(!pagoRetorno) return; const r=pagoRetorno; pagoRetorno=null; if(r==='ok') esperarPago(); else toast('Pago cancelado'); }
+async function esperarPago(){
+  const v0=(Cloud.negocioInfo && Cloud.negocioInfo.vence) || '';
+  toast('Recibimos tu pago. Activando tu suscripción...');
+  for(let i=0;i<8;i++){
+    await new Promise(r=>setTimeout(r,Plan.espera)); await refrescarNegocio();
+    if(((Cloud.negocioInfo && Cloud.negocioInfo.vence) || '')!==v0){ toast('✅ Suscripción renovada'); return; }
+  }
+  toast('Tu pago puede tardar unos minutos en reflejarse');
+}
 function puedeEscribirClave(k){
   if(Cloud.tipo!=='supabase') return true;
   if(Cloud.soloLectura || Cloud.rol==='lectura') return false;
@@ -1704,6 +1797,13 @@ function crearSupabaseDb(url,key){
     },
     async recuperar(email){ const {r,j}=await post('/auth/v1/recover',{email}); if(!r.ok) throw {code:'invalid_argument', message:msg(j)||'No se pudo enviar el correo'}; },
     rpc:(nombre,body)=>rest('rpc/'+nombre,{method:'POST',body:JSON.stringify(body||{})}),
+    async funcion(nombre,body){
+      const t=await token();
+      const r=await fetch(url+'/functions/v1/'+nombre,{method:'POST',headers:{apikey:key,Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw {code:'invalid_argument', message:j.error||'No se pudo completar la acción'};
+      return j;
+    },
     doc:path=>{ const [col,id]=path.split('/'); return {
       async get(){ const a=await rest(T(col)+'?select=data&'+N()+'&id=eq.'+encodeURIComponent(id)); const d=a&&a[0]?a[0].data:null; return {id,exists:d!==null,data:()=>d}; },
       set:d=>rest(T(col)+'?on_conflict=negocio_id,id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({negocio_id:neg,id,data:d})}),
@@ -1761,7 +1861,8 @@ function cerrarSesion(){
 function aplicarRol(){
   const b=document.body; if(!b) return;
   b.classList.toggle('rol-cajero', Cloud.rol==='cajero');
-  b.classList.toggle('rol-lectura', Cloud.rol==='lectura' || !!Cloud.soloLectura);
+  b.classList.toggle('rol-lectura', Cloud.rol==='lectura');
+  b.classList.toggle('sin-plan', !!Cloud.soloLectura);
 }
 function cambiarEspacioLocal(id){
   LS_NEG=id; try{ localStorage.setItem('posflowNegocio',id); }catch(e){}
@@ -1771,9 +1872,9 @@ function cambiarEspacioLocal(id){
 }
 function activarNegocio(n){
   Cloud.db.setNegocio(n.id); Cloud.negocio=n.id; Cloud.negocioInfo=n; Cloud.rol=n.rol;
-  Cloud.soloLectura=!(n.estado==='activo' || (n.estado==='prueba' && n.vence && new Date(n.vence)>new Date()));
+  Cloud.soloLectura=calcSoloLectura(n);
   if(LS_NEG!==n.id) cambiarEspacioLocal(n.id);
-  aplicarRol();
+  aplicarRol(); actualizarBanner();
   if(Cloud.soloLectura && n.rol!=='lectura') toast('Tu prueba terminó o el negocio está suspendido: solo lectura');
 }
 async function elegirNegocio(db){
@@ -1907,7 +2008,7 @@ async function iniciarNube(){
   }
   try{
     const meta=await db.doc('meta/estado').get();
-    if(meta.exists){ await cargarDeNube(db); Cloud.listo=true; Cloud.backoff=0; Cloud.ultima=new Date(); recordarBackend(); nubeEstado('ok'); refrescarTodo(); nubeProgramar(); iniciarSondeo(); }
+    if(meta.exists){ await cargarDeNube(db); Cloud.listo=true; Cloud.backoff=0; Cloud.ultima=new Date(); recordarBackend(); nubeEstado('ok'); refrescarTodo(); nubeProgramar(); iniciarSondeo(); revisarRetornoPago(); }
     else if(Cloud.autoSubir){ Cloud.autoSubir=false; Cloud.cargando=false; await subirANube(); }
     else { nubeEstado('vacia','La nube está vacía: falta subir los datos de este dispositivo'); }
   }catch(e){
@@ -1963,10 +2064,11 @@ function renderDatos(){
     else if(nn.estado==='prueba' && nn.vence) h+='<div class="lr-sub">Prueba gratuita hasta el '+new Date(nn.vence).toLocaleDateString('es-GT')+'</div>';
     h+='<button class="btn-wide" style="margin-top:10px;" onclick="abrirNegocios()">🏪 Cambiar de negocio o crear otro</button>';
     h+='<button class="btn-wide solo-dueno" style="margin-top:8px;" onclick="abrirUsuarios()">👥 Usuarios y accesos</button>';
+    h+='<button class="btn-wide solo-dueno" style="margin-top:8px;" onclick="abrirPlan()">💳 Mi suscripción y pagos</button>';
   }
   if(Cloud.tipo==='supabase' && Cloud.db && Cloud.db.tieneSesion && Cloud.db.tieneSesion()) h+='<button class="btn-wide" style="margin-top:8px;" onclick="cerrarSesion()">Cerrar sesión</button>';
   h+=bloqueInstalar();
-  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 2.1 en vivo (16/11/2026)</div>';
+  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 2.2 suscripciones (16/11/2026)</div>';
   el.innerHTML=h;
 }
 async function respaldoDescargar(){
@@ -2050,6 +2152,7 @@ window.addEventListener('offline',()=>{ toast('Sin conexión: sigues vendiendo, 
 window.addEventListener('online',()=>{ toast('Conexión restablecida: sincronizando...'); Cloud.backoff=0; clearTimeout(Cloud.retry); if(!Cloud.cargando) reconectar(); });
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState!=='visible') return; if(Cloud.estado==='offline'||Cloud.estado==='error') reconectar(); if(Poll.activo) proximoSondeo(300); });
 try{ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').then(()=>{ window.__swOk=true; }).catch(()=>{}); }catch(e){}
+try{ const u=new URL(location.href), pg=u.searchParams.get('pago'); if(pg){ pagoRetorno=pg; u.searchParams.delete('pago'); if(window.history && history.replaceState) history.replaceState(null,'',u.pathname+(u.search||'')+u.hash); } }catch(e){}
 iniciarNube();
 </script>
 </body>
