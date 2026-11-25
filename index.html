@@ -303,7 +303,7 @@ body.rol-lectura .no-lectura,body.sin-plan .no-lectura{display:none!important}
   <div class="modal">
     <h3 id="cliDetNombre">Cliente</h3>
     <div class="stat" style="margin-bottom:14px;"><div class="n" id="cliDetSaldo">Q0</div><div class="l">Saldo pendiente</div></div>
-    <div class="field"><label>Registrar abono (Q)</label><input id="cliAbono" type="number" inputmode="decimal" placeholder="0.00"></div>
+    <div class="field"><label>Registrar abono (Q)</label><input id="cliAbono" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" onkeydown="if(event.key==='Enter') registrarAbono()"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="cerrarModal('ovCliDet')">Cerrar</button>
       <button class="btn-primary" onclick="registrarAbono()">Registrar abono</button>
@@ -812,14 +812,20 @@ function abrirDetalleCliente(id){
   abrirModal('ovCliDet');
 }
 function registrarAbono(){
-  const monto=parseFloat(document.getElementById('cliAbono').value);
-  if(!monto || monto<=0 || !detCliId) return;
-  const c=DB.clientes.find(x=>x.id===detCliId);
-  c.saldo = Math.max(0, (c.saldo||0) - monto);
+  if(Cloud.tipo==='supabase' && (Cloud.rol==='lectura' || Cloud.soloLectura)){ toast(Cloud.rol==='lectura' ? 'Tu usuario es de solo lectura: no puede registrar abonos' : 'Tu suscripción venció: renuévala para registrar abonos'); return; }
+  let monto=parseFloat(String(document.getElementById('cliAbono').value||'').trim().replace(',','.'));
+  if(!monto || monto<=0 || !detCliId){ toast('Escribe el monto del abono'); return; }
+  const c=DB.clientes.find(x=>x.id===detCliId); if(!c) return;
+  const saldo=c.saldo||0;
+  if(saldo<=0){ toast('Este cliente no tiene saldo pendiente'); return; }
+  let aviso='Abono registrado';
+  if(monto>saldo){ monto=saldo; aviso='El abono se ajustó al saldo pendiente'; }
+  c.saldo=Math.round((saldo-monto)*100)/100;
   DB.pagos.push({id:uid(), clienteId:detCliId, monto, fecha:Date.now()});
   guardar();
   abrirDetalleCliente(detCliId);
   renderCli();
+  toast(aviso+' · saldo '+fmtQ(c.saldo));
 }
 
 // ---------- REPORTES ----------
