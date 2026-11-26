@@ -1,5 +1,5 @@
 // PosFlow - service worker: permite abrir la app sin internet.
-const V = 'posflow-v3';
+const V = 'posflow-v4';
 const LIBS = [
   'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
@@ -30,7 +30,7 @@ self.addEventListener('fetch', (e) => {
   if (u.origin !== location.origin || u.pathname.indexOf('/api/') === 0) return;
   // La app: red primero (así se actualiza sola) y, sin internet, la copia guardada
   e.respondWith(
-    fetch(r).then((x) => { if (x.ok) { const cp = x.clone(); caches.open(V).then((c) => c.put(r, cp)); } return x; })
+    fetch(r, { cache: 'no-cache' }).then((x) => { if (x.ok) { const cp = x.clone(); caches.open(V).then((c) => c.put(r, cp)); } return x; })
       .catch(() => caches.match(r).then((m) => m || caches.match('index.html')))
   );
 });

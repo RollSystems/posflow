@@ -1644,6 +1644,29 @@ async function esperarPago(){
   }
   toast('Tu pago puede tardar unos minutos en reflejarse');
 }
+var APP_VERSION='2.4', APP_FECHA='24/11/2026', avisoVersion=false;
+async function versionServidor(){
+  const r=await fetch('version.json?x='+Date.now(),{cache:'no-store'});
+  if(!r.ok) throw new Error('sin version.json');
+  return String((await r.json()).version);
+}
+async function comprobarVersionSilencioso(){
+  try{ const v=await versionServidor(); if(v!==APP_VERSION && !avisoVersion){ avisoVersion=true; toast('Hay una versión distinta en tu sitio ('+v+'). Abre Datos y respaldo y toca Buscar actualización'); } }catch(e){}
+}
+async function buscarActualizacion(){
+  let v;
+  try{ v=await versionServidor(); }
+  catch(e){ toast('No se pudo comprobar: sin conexión, o falta el archivo version.json en tu sitio'); return; }
+  if(v===APP_VERSION){ toast('Ya tienes la última versión ('+APP_VERSION+')'); return; }
+  toast('Tu sitio ofrece la versión '+v+'. Actualizando...');
+  try{ const regs=await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(x=>x.unregister())); }catch(e){}
+  try{ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); }catch(e){}
+  location.href=location.pathname+'?v='+Date.now();
+}
+function bloqueActualizar(){
+  if(!window.__swOk) return '';
+  return '<button class="btn-wide" style="margin-top:10px;" onclick="buscarActualizacion()">🔄 Buscar actualización</button>';
+}
 function puedeEscribirClave(k){
   if(Cloud.tipo!=='supabase') return true;
   if(Cloud.soloLectura || Cloud.rol==='lectura') return false;
@@ -2075,7 +2098,8 @@ function renderDatos(){
   }
   if(Cloud.tipo==='supabase' && Cloud.db && Cloud.db.tieneSesion && Cloud.db.tieneSesion()) h+='<button class="btn-wide" style="margin-top:8px;" onclick="cerrarSesion()">Cerrar sesión</button>';
   h+=bloqueInstalar();
-  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow 2.3 (24/11/2026)</div>';
+  h+=bloqueActualizar();
+  h+='<div class="lr-sub" style="margin-top:10px;">Versión: PosFlow '+APP_VERSION+' ('+APP_FECHA+')</div>';
   el.innerHTML=h;
 }
 async function respaldoDescargar(){
@@ -2158,7 +2182,7 @@ function bloqueInstalar(){
 window.addEventListener('offline',()=>{ toast('Sin conexión: sigues vendiendo, se sincronizará solo'); if(Cloud.listo) nubeProgramar(); });
 window.addEventListener('online',()=>{ toast('Conexión restablecida: sincronizando...'); Cloud.backoff=0; clearTimeout(Cloud.retry); if(!Cloud.cargando) reconectar(); });
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState!=='visible') return; if(Cloud.estado==='offline'||Cloud.estado==='error') reconectar(); if(Poll.activo) proximoSondeo(300); });
-try{ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').then(()=>{ window.__swOk=true; }).catch(()=>{}); }catch(e){}
+try{ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').then(()=>{ window.__swOk=true; comprobarVersionSilencioso(); }).catch(()=>{}); }catch(e){}
 try{ const u=new URL(location.href), pg=u.searchParams.get('pago'); if(pg){ pagoRetorno=pg; u.searchParams.delete('pago'); if(window.history && history.replaceState) history.replaceState(null,'',u.pathname+(u.search||'')+u.hash); } }catch(e){}
 iniciarNube();
 </script>
